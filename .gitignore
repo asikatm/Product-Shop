@@ -1,0 +1,13 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.slnLaunch.user
+
+# Build output
+bin/
+obj/
+
+# Rider / VS Code
+.idea/
+.vscode/
