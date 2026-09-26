@@ -1,0 +1,97 @@
+@page "/stock/{Id:int}"
+@inject StockService StockService
+@inject IJSRuntime JS
+
+<PageTitle>Stock Entry #@Id</PageTitle>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (entry == null)
+{
+    @if (string.IsNullOrEmpty(error))
+    {
+        <p>Loading...</p>
+    }
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+        <a href="stock">&larr; Stock In list</a>
+        <div>
+            <a class="btn btn-outline-primary" href="stock/new">+ New Entry</a>
+            <button class="btn btn-primary" @onclick="PrintAsync">Print</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <h1 class="h4">Stock Entry #@entry.Id</h1>
+            <div class="row mb-3">
+                <div class="col-md-4"><strong>Date:</strong> @Fmt.Date(entry.EntryDate)</div>
+                <div class="col-md-4"><strong>Supplier:</strong> @entry.SupplierName</div>
+                <div class="col-md-4"><strong>Ref No:</strong> @entry.ReferenceNo</div>
+            </div>
+
+            <table class="table table-bordered">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Product</th>
+                        <th class="text-end">Qty</th>
+                        <th class="text-end">Unit Cost</th>
+                        <th class="text-end">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var i = 0; i < entry.Items.Count; i++)
+                    {
+                        var item = entry.Items[i];
+                        <tr>
+                            <td>@(i + 1)</td>
+                            <td>@item.ProductName</td>
+                            <td class="text-end">@item.Quantity</td>
+                            <td class="text-end">@Fmt.Money(item.UnitCost)</td>
+                            <td class="text-end">@Fmt.Money(item.Total)</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot class="fw-semibold">
+                    <tr>
+                        <td colspan="4" class="text-end">Total</td>
+                        <td class="text-end">@Fmt.Money(entry.TotalAmount)</td>
+                    </tr>
+                </tfoot>
+            </table>
+
+            @if (!string.IsNullOrWhiteSpace(entry.Note))
+            {
+                <p><strong>Note:</strong> @entry.Note</p>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private StockEntry? entry;
+    private string? error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            error = null;
+            entry = await StockService.GetByIdAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            error = "Stock entry pawa jay nai: " + ex.Message;
+        }
+    }
+
+    private async Task PrintAsync() => await JS.InvokeVoidAsync("print");
+}

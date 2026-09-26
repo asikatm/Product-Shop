@@ -1,0 +1,126 @@
+@page "/stock"
+@inject StockService StockService
+@inject IJSRuntime JS
+
+<PageTitle>Stock In</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Stock In</h1>
+    <a class="btn btn-primary" href="stock/new">+ New Stock Entry</a>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body row g-2 align-items-end">
+        <div class="col-auto">
+            <label class="form-label">From</label>
+            <input type="date" class="form-control" @bind="from" />
+        </div>
+        <div class="col-auto">
+            <label class="form-label">To</label>
+            <input type="date" class="form-control" @bind="to" />
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-outline-primary" @onclick="LoadAsync">Search</button>
+        </div>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (entries == null)
+{
+    <p>Loading...</p>
+}
+else if (entries.Count == 0)
+{
+    <div class="alert alert-info">Ei date er moddhe kono stock entry nai.</div>
+}
+else
+{
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Date</th>
+                        <th>Supplier</th>
+                        <th>Ref No</th>
+                        <th class="text-end">Items</th>
+                        <th class="text-end">Total</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var e in entries)
+                    {
+                        <tr>
+                            <td>@e.Id</td>
+                            <td>@Fmt.Date(e.EntryDate)</td>
+                            <td>@e.SupplierName</td>
+                            <td>@e.ReferenceNo</td>
+                            <td class="text-end">@e.Items.Sum(i => i.Quantity) pcs</td>
+                            <td class="text-end">@Fmt.Money(e.TotalAmount)</td>
+                            <td class="text-end text-nowrap">
+                                <a class="btn btn-sm btn-outline-secondary" href="stock/@e.Id">View</a>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(e)">Delete</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot class="table-light fw-semibold">
+                    <tr>
+                        <td colspan="5" class="text-end">Total</td>
+                        <td class="text-end">@Fmt.Money(entries.Sum(e => e.TotalAmount))</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private List<StockEntry>? entries;
+    private string? error;
+    private DateTime? from = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime? to = DateTime.Today;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            error = null;
+            entries = await StockService.GetAllAsync(from, to);
+        }
+        catch (Exception ex)
+        {
+            entries = new List<StockEntry>();
+            error = "Data ana jay nai: " + ex.Message;
+        }
+    }
+
+    private async Task DeleteAsync(StockEntry e)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", $"Stock entry #{e.Id} delete korte chan? Ei entry er stock kome jabe.");
+        if (!ok) return;
+
+        try
+        {
+            await StockService.DeleteAsync(e.Id);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+}

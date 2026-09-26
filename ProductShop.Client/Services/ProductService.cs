@@ -25,18 +25,18 @@ public class ProductService
     public async Task CreateAsync(Product product)
     {
         var response = await _http.PostAsJsonAsync("api/products", product);
-        response.EnsureSuccessStatusCode();
+        await response.EnsureOkAsync();
     }
 
     public async Task UpdateAsync(Product product)
     {
         var response = await _http.PutAsJsonAsync($"api/products/{product.Id}", product);
-        response.EnsureSuccessStatusCode();
+        await response.EnsureOkAsync();
     }
 
     public async Task DeleteAsync(int id)
     {
         var response = await _http.DeleteAsync($"api/products/{id}");
-        response.EnsureSuccessStatusCode();
+        await response.EnsureOkAsync();
     }
 }

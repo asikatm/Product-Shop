@@ -1,0 +1,244 @@
+@page "/sales/new"
+@inject ProductService ProductService
+@inject SaleService SaleService
+@inject NavigationManager Nav
+
+<PageTitle>New Sale</PageTitle>
+
+<h1 class="h3 mb-3">New Sale</h1>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (products == null)
+{
+    <p>Loading...</p>
+}
+else if (products.Count == 0)
+{
+    <div class="alert alert-info">Age <a href="product/add">product add korun</a>.</div>
+}
+else
+{
+    <EditForm Model="sale" OnValidSubmit="SaveAsync">
+        <DataAnnotationsValidator />
+
+        <div class="card mb-3">
+            <div class="card-body row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Date</label>
+                    <InputDate class="form-control" @bind-Value="sale.SaleDate" />
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Customer Name</label>
+                    <InputText class="form-control" @bind-Value="sale.CustomerName" placeholder="Walk-in customer" />
+                    <ValidationMessage For="() => sale.CustomerName" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Phone</label>
+                    <InputText class="form-control" @bind-Value="sale.CustomerPhone" />
+                    <ValidationMessage For="() => sale.CustomerPhone" />
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="table-responsive">
+                <table class="table mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="min-width:220px">Product</th>
+                            <th class="text-end">Stock</th>
+                            <th style="width:120px">Qty</th>
+                            <th style="width:150px">Unit Price</th>
+                            <th class="text-end">Total</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var line in sale.Items)
+                        {
+                            var product = FindProduct(line.ProductId);
+                            var over = product != null && line.Quantity > product.Quantity;
+                            <tr @key="line">
+                                <td>
+                                    <select class="form-select" value="@line.ProductId" @onchange="e => OnProductChanged(line, e.Value)">
+                                        <option value="0">-- Product select korun --</option>
+                                        @foreach (var p in products)
+                                        {
+                                            <option value="@p.Id" disabled="@(p.Quantity <= 0)">@p.Name (Stock: @p.Quantity)</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td class="text-end">
+                                    @if (product != null)
+                                    {
+                                        <StockBadge Product="product" />
+                                    }
+                                    else
+                                    {
+                                        <span>-</span>
+                                    }
+                                </td>
+                                <td>
+                                    <input type="number" min="1" class="form-control @(over ? "is-invalid" : "")" @bind="line.Quantity" @bind:event="oninput" />
+                                </td>
+                                <td><input type="number" min="0" step="0.01" class="form-control" @bind="line.UnitPrice" /></td>
+                                <td class="text-end">@Fmt.Money(line.Quantity * line.UnitPrice)</td>
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => sale.Items.Remove(line)">✕</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-body border-top">
+                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddLine">+ Add Row</button>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label">Note</label>
+                <InputTextArea class="form-control" rows="5" @bind-Value="sale.Note" />
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Sub Total</span>
+                            <strong>@Fmt.Money(SubTotal)</strong>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span>Discount</span>
+                            <input type="number" min="0" step="0.01" class="form-control w-50 text-end" @bind="sale.Discount" />
+                        </div>
+                        <div class="d-flex justify-content-between mb-2 fs-5">
+                            <span>Grand Total</span>
+                            <strong>@Fmt.Money(GrandTotal)</strong>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span>
+                                Paid
+                                <button type="button" class="btn btn-link btn-sm p-0 ms-1" @onclick="PayFull">(Full)</button>
+                            </span>
+                            <input type="number" min="0" step="0.01" class="form-control w-50 text-end" @bind="sale.PaidAmount" />
+                        </div>
+                        @if (sale.PaidAmount > GrandTotal)
+                        {
+                            <div class="d-flex justify-content-between text-success">
+                                <span>Change (ferot)</span>
+                                <strong>@Fmt.Money(sale.PaidAmount - GrandTotal)</strong>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="d-flex justify-content-between @(GrandTotal - sale.PaidAmount > 0 ? "text-danger" : "")">
+                                <span>Due (baki)</span>
+                                <strong>@Fmt.Money(GrandTotal - sale.PaidAmount)</strong>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-3">
+            <button type="submit" class="btn btn-success btn-lg" disabled="@saving">@(saving ? "Saving..." : "Save Sale")</button>
+            <a class="btn btn-secondary btn-lg" href="sales">Cancel</a>
+        </div>
+    </EditForm>
+}
+
+@code {
+    private List<Product>? products;
+    private Sale sale = new();
+    private string? error;
+    private bool saving;
+
+    private decimal SubTotal => sale.Items.Sum(i => i.Quantity * i.UnitPrice);
+    private decimal GrandTotal => SubTotal - sale.Discount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            products = await ProductService.GetAllAsync();
+            AddLine();
+        }
+        catch (Exception ex)
+        {
+            error = "Product list ana jay nai: " + ex.Message;
+        }
+    }
+
+    private Product? FindProduct(int id) => products?.FirstOrDefault(p => p.Id == id);
+
+    private void AddLine() => sale.Items.Add(new SaleItem { Quantity = 1 });
+
+    private void PayFull() => sale.PaidAmount = GrandTotal;
+
+    private void OnProductChanged(SaleItem line, object? value)
+    {
+        line.ProductId = int.TryParse(value?.ToString(), out var id) ? id : 0;
+        var product = FindProduct(line.ProductId);
+        line.ProductName = product?.Name ?? string.Empty;
+        line.UnitPrice = product?.Price ?? 0;
+    }
+
+    private async Task SaveAsync()
+    {
+        error = null;
+
+        var lines = sale.Items.Where(i => i.ProductId > 0).ToList();
+        if (lines.Count == 0)
+        {
+            error = "Kompokkhe ekta product select korun.";
+            return;
+        }
+        if (lines.Any(i => i.Quantity <= 0))
+        {
+            error = "Quantity 0 er beshi hote hobe.";
+            return;
+        }
+        foreach (var group in lines.GroupBy(i => i.ProductId))
+        {
+            var product = FindProduct(group.Key)!;
+            var need = group.Sum(i => i.Quantity);
+            if (need > product.Quantity)
+            {
+                error = $"'{product.Name}' er stock ache {product.Quantity}, apni diyechen {need}.";
+                return;
+            }
+        }
+        if (sale.Discount < 0 || sale.Discount > SubTotal)
+        {
+            error = "Discount 0 theke sub total er moddhe hote hobe.";
+            return;
+        }
+        if (sale.PaidAmount < 0)
+        {
+            error = "Paid amount negative hote parbe na.";
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            sale.Items = lines;
+            var created = await SaleService.CreateAsync(sale);
+            Nav.NavigateTo($"sales/{created.Id}");
+        }
+        catch (Exception ex)
+        {
+            error = "Save kora jay nai: " + ex.Message;
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

@@ -1,15 +1,18 @@
 @inherits LayoutComponentBase
 
-<nav class="navbar navbar-expand navbar-dark bg-dark mb-4">
+<nav class="navbar navbar-expand-md navbar-dark bg-dark mb-4 no-print">
     <div class="container">
         <a class="navbar-brand" href="">Product Shop</a>
-        <div class="navbar-nav">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Products</NavLink>
-            <NavLink class="nav-link" href="product/add">Add Product</NavLink>
+        <div class="navbar-nav me-auto flex-wrap">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Dashboard</NavLink>
+            <NavLink class="nav-link" href="products">Products</NavLink>
+            <NavLink class="nav-link" href="stock">Stock In</NavLink>
+            <NavLink class="nav-link" href="sales">Sales</NavLink>
         </div>
+        <a class="btn btn-success btn-sm" href="sales/new">+ New Sale</a>
     </div>
 </nav>
 
-<main class="container">
+<main class="container pb-5">
     @Body
 </main>

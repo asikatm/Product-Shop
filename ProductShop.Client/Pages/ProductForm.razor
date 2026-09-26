@@ -31,27 +31,45 @@ else
 
                 <div class="mb-3">
                     <label class="form-label">Description</label>
-                    <InputTextArea class="form-control" rows="3" @bind-Value="product.Description" />
+                    <InputTextArea class="form-control" rows="2" @bind-Value="product.Description" />
                     <ValidationMessage For="() => product.Description" />
                 </div>
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">Price</label>
+                        <label class="form-label">Purchase Price (kena dam)</label>
+                        <InputNumber class="form-control" @bind-Value="product.PurchasePrice" />
+                        <ValidationMessage For="() => product.PurchasePrice" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Sale Price (bikri dam)</label>
                         <InputNumber class="form-control" @bind-Value="product.Price" />
                         <ValidationMessage For="() => product.Price" />
                     </div>
+                </div>
+
+                <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">Quantity</label>
-                        <InputNumber class="form-control" @bind-Value="product.Quantity" />
+                        <label class="form-label">@(IsEdit ? "Current Stock" : "Opening Stock")</label>
+                        <InputNumber class="form-control" @bind-Value="product.Quantity" disabled="@IsEdit" />
+                        @if (IsEdit)
+                        {
+                            <div class="form-text">Stock barate "Stock In", komate "Sale" use korun.</div>
+                        }
                         <ValidationMessage For="() => product.Quantity" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Reorder Level</label>
+                        <InputNumber class="form-control" @bind-Value="product.ReorderLevel" />
+                        <div class="form-text">Stock eto ba er kom hole "Low stock" dekhabe.</div>
+                        <ValidationMessage For="() => product.ReorderLevel" />
                     </div>
                 </div>
 
                 <button type="submit" class="btn btn-success" disabled="@saving">
                     @(saving ? "Saving..." : IsEdit ? "Update" : "Save")
                 </button>
-                <a class="btn btn-secondary" href="">Cancel</a>
+                <a class="btn btn-secondary" href="products">Cancel</a>
             </EditForm>
         </div>
     </div>
@@ -98,7 +116,7 @@ else
             else
                 await ProductService.CreateAsync(product!);
 
-            Nav.NavigateTo("");
+            Nav.NavigateTo("products");
         }
         catch (Exception ex)
         {

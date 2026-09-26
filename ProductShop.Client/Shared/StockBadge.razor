@@ -1,0 +1,16 @@
+@if (Product.Quantity <= 0)
+{
+    <span class="badge bg-danger">Out (0)</span>
+}
+else if (Product.Quantity <= Product.ReorderLevel)
+{
+    <span class="badge bg-warning text-dark">@Product.Quantity</span>
+}
+else
+{
+    <span class="badge bg-success">@Product.Quantity</span>
+}
+
+@code {
+    [Parameter, EditorRequired] public Product Product { get; set; } = default!;
+}

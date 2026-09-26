@@ -13,6 +13,30 @@ body {
     font-size: 0.875rem;
 }
 
+.stat-card .label {
+    color: #6c757d;
+    font-size: 0.85rem;
+}
+
+.stat-card .value {
+    font-size: 1.4rem;
+    font-weight: 600;
+}
+
+@media print {
+    .no-print {
+        display: none !important;
+    }
+
+    body {
+        background: #fff;
+    }
+
+    .card {
+        border: none;
+    }
+}
+
 #blazor-error-ui {
     background: lightyellow;
     bottom: 0;

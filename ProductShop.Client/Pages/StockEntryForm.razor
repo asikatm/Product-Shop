@@ -1,0 +1,172 @@
+@page "/stock/new"
+@inject ProductService ProductService
+@inject StockService StockService
+@inject NavigationManager Nav
+
+<PageTitle>New Stock Entry</PageTitle>
+
+<h1 class="h3 mb-3">New Stock Entry</h1>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (products == null)
+{
+    <p>Loading...</p>
+}
+else if (products.Count == 0)
+{
+    <div class="alert alert-info">Age <a href="product/add">product add korun</a>, tarpor stock entry din.</div>
+}
+else
+{
+    <EditForm Model="entry" OnValidSubmit="SaveAsync">
+        <DataAnnotationsValidator />
+
+        <div class="card mb-3">
+            <div class="card-body row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Date</label>
+                    <InputDate class="form-control" @bind-Value="entry.EntryDate" />
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Supplier Name</label>
+                    <InputText class="form-control" @bind-Value="entry.SupplierName" />
+                    <ValidationMessage For="() => entry.SupplierName" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Ref / Challan No</label>
+                    <InputText class="form-control" @bind-Value="entry.ReferenceNo" />
+                    <ValidationMessage For="() => entry.ReferenceNo" />
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="table-responsive">
+                <table class="table mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="min-width:220px">Product</th>
+                            <th class="text-end">Current Stock</th>
+                            <th style="width:120px">Qty</th>
+                            <th style="width:150px">Unit Cost</th>
+                            <th class="text-end">Total</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var line in entry.Items)
+                        {
+                            var product = FindProduct(line.ProductId);
+                            <tr @key="line">
+                                <td>
+                                    <select class="form-select" value="@line.ProductId" @onchange="e => OnProductChanged(line, e.Value)">
+                                        <option value="0">-- Product select korun --</option>
+                                        @foreach (var p in products)
+                                        {
+                                            <option value="@p.Id">@p.Name</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td class="text-end">@(product?.Quantity.ToString() ?? "-")</td>
+                                <td><input type="number" min="1" class="form-control" @bind="line.Quantity" @bind:event="oninput" /></td>
+                                <td><input type="number" min="0" step="0.01" class="form-control" @bind="line.UnitCost" /></td>
+                                <td class="text-end">@Fmt.Money(line.Quantity * line.UnitCost)</td>
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => entry.Items.Remove(line)">✕</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-body border-top d-flex justify-content-between align-items-center">
+                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddLine">+ Add Row</button>
+                <span class="fs-5 fw-semibold">Total: @Fmt.Money(Total)</span>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Note</label>
+            <InputTextArea class="form-control" rows="2" @bind-Value="entry.Note" />
+        </div>
+
+        <button type="submit" class="btn btn-success" disabled="@saving">@(saving ? "Saving..." : "Save Stock Entry")</button>
+        <a class="btn btn-secondary" href="stock">Cancel</a>
+    </EditForm>
+}
+
+@code {
+    private List<Product>? products;
+    private StockEntry entry = new();
+    private string? error;
+    private bool saving;
+
+    private decimal Total => entry.Items.Sum(i => i.Quantity * i.UnitCost);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            products = await ProductService.GetAllAsync();
+            AddLine();
+        }
+        catch (Exception ex)
+        {
+            error = "Product list ana jay nai: " + ex.Message;
+        }
+    }
+
+    private Product? FindProduct(int id) => products?.FirstOrDefault(p => p.Id == id);
+
+    private void AddLine() => entry.Items.Add(new StockEntryItem { Quantity = 1 });
+
+    private void OnProductChanged(StockEntryItem line, object? value)
+    {
+        line.ProductId = int.TryParse(value?.ToString(), out var id) ? id : 0;
+        var product = FindProduct(line.ProductId);
+        line.ProductName = product?.Name ?? string.Empty;
+        line.UnitCost = product?.PurchasePrice ?? 0;
+    }
+
+    private async Task SaveAsync()
+    {
+        error = null;
+
+        var lines = entry.Items.Where(i => i.ProductId > 0).ToList();
+        if (lines.Count == 0)
+        {
+            error = "Kompokkhe ekta product select korun.";
+            return;
+        }
+        if (lines.Any(i => i.Quantity <= 0))
+        {
+            error = "Quantity 0 er beshi hote hobe.";
+            return;
+        }
+        if (lines.Any(i => i.UnitCost < 0))
+        {
+            error = "Unit cost negative hote parbe na.";
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            entry.Items = lines;
+            var created = await StockService.CreateAsync(entry);
+            Nav.NavigateTo($"stock/{created.Id}");
+        }
+        catch (Exception ex)
+        {
+            error = "Save kora jay nai: " + ex.Message;
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

@@ -1,0 +1,118 @@
+@page "/sales/{Id:int}"
+@inject SaleService SaleService
+@inject IJSRuntime JS
+
+<PageTitle>Invoice @sale?.InvoiceNo</PageTitle>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (sale == null)
+{
+    @if (string.IsNullOrEmpty(error))
+    {
+        <p>Loading...</p>
+    }
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+        <a href="sales">&larr; Sales list</a>
+        <div>
+            <a class="btn btn-outline-success" href="sales/new">+ New Sale</a>
+            <button class="btn btn-primary" @onclick="PrintAsync">Print Invoice</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-4">
+            <div class="d-flex justify-content-between mb-4">
+                <div>
+                    <h1 class="h3 mb-0">Product Shop</h1>
+                    <div class="text-muted">Sales Invoice</div>
+                </div>
+                <div class="text-end">
+                    <div class="fs-5 fw-semibold">@sale.InvoiceNo</div>
+                    <div>Date: @Fmt.Date(sale.SaleDate)</div>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <strong>Customer:</strong> @(sale.CustomerName ?? "Walk-in customer")
+                @if (!string.IsNullOrEmpty(sale.CustomerPhone))
+                {
+                    <span> &middot; @sale.CustomerPhone</span>
+                }
+            </div>
+
+            <table class="table table-bordered">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Product</th>
+                        <th class="text-end">Qty</th>
+                        <th class="text-end">Unit Price</th>
+                        <th class="text-end">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var i = 0; i < sale.Items.Count; i++)
+                    {
+                        var item = sale.Items[i];
+                        <tr>
+                            <td>@(i + 1)</td>
+                            <td>@item.ProductName</td>
+                            <td class="text-end">@item.Quantity</td>
+                            <td class="text-end">@Fmt.Money(item.UnitPrice)</td>
+                            <td class="text-end">@Fmt.Money(item.Total)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <div class="row">
+                <div class="col-md-6">
+                    @if (!string.IsNullOrWhiteSpace(sale.Note))
+                    {
+                        <p><strong>Note:</strong> @sale.Note</p>
+                    }
+                </div>
+                <div class="col-md-6">
+                    <table class="table table-sm">
+                        <tr><td>Sub Total</td><td class="text-end">@Fmt.Money(sale.SubTotal)</td></tr>
+                        <tr><td>Discount</td><td class="text-end">- @Fmt.Money(sale.Discount)</td></tr>
+                        <tr class="fw-semibold fs-5"><td>Grand Total</td><td class="text-end">@Fmt.Money(sale.GrandTotal)</td></tr>
+                        <tr><td>Paid</td><td class="text-end">@Fmt.Money(sale.PaidAmount)</td></tr>
+                        <tr class="@(sale.DueAmount > 0 ? "text-danger fw-semibold" : "")"><td>Due</td><td class="text-end">@Fmt.Money(sale.DueAmount)</td></tr>
+                    </table>
+                </div>
+            </div>
+
+            <p class="text-center text-muted mt-4 mb-0">Dhonnobad! Abar ashben.</p>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Sale? sale;
+    private string? error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            error = null;
+            sale = await SaleService.GetByIdAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            error = "Invoice pawa jay nai: " + ex.Message;
+        }
+    }
+
+    private async Task PrintAsync() => await JS.InvokeVoidAsync("print");
+}

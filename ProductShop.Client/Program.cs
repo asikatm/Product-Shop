@@ -11,5 +11,7 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "http://localhost:5000/";
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
 builder.Services.AddScoped<ProductService>();
+builder.Services.AddScoped<StockService>();
+builder.Services.AddScoped<SaleService>();
 
 await builder.Build().RunAsync();

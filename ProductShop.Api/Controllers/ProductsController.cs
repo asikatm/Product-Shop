@@ -20,7 +20,7 @@ public class ProductsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<Product>>> GetAll()
     {
-        return await _db.Products.OrderByDescending(p => p.Id).ToListAsync();
+        return await _db.Products.OrderBy(p => p.Name).ToListAsync();
     }
 
     // GET: api/products/5
@@ -33,6 +33,7 @@ public class ProductsController : ControllerBase
     }
 
     // POST: api/products
+    // Quantity ekhane opening stock hisebe dhora hoy
     [HttpPost]
     public async Task<ActionResult<Product>> Create(Product product)
     {
@@ -44,6 +45,7 @@ public class ProductsController : ControllerBase
     }
 
     // PUT: api/products/5
+    // Stock (Quantity) ekhane change hoy na, Stock In / Sale diye hoy
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, Product product)
     {
@@ -54,8 +56,9 @@ public class ProductsController : ControllerBase
 
         existing.Name = product.Name;
         existing.Description = product.Description;
+        existing.PurchasePrice = product.PurchasePrice;
         existing.Price = product.Price;
-        existing.Quantity = product.Quantity;
+        existing.ReorderLevel = product.ReorderLevel;
 
         await _db.SaveChangesAsync();
         return NoContent();
@@ -67,6 +70,11 @@ public class ProductsController : ControllerBase
     {
         var product = await _db.Products.FindAsync(id);
         if (product == null) return NotFound();
+
+        var used = await _db.SaleItems.AnyAsync(i => i.ProductId == id)
+                || await _db.StockEntryItems.AnyAsync(i => i.ProductId == id);
+        if (used)
+            return BadRequest($"'{product.Name}' er stock entry ba sale ache, tai delete kora jabe na.");
 
         _db.Products.Remove(product);
         await _db.SaveChangesAsync();
