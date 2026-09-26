@@ -1,6 +1,8 @@
 @page "/product/add"
 @page "/product/edit/{Id:int}"
+@attribute [AdminOnly]
 @inject ProductService ProductService
+@inject CatalogService CatalogService
 @inject NavigationManager Nav
 
 <PageTitle>@(IsEdit ? "Edit Product" : "Add Product")</PageTitle>
@@ -18,69 +20,162 @@
 }
 else
 {
-    <div class="card">
-        <div class="card-body">
-            <EditForm Model="product" OnValidSubmit="SaveAsync">
-                <DataAnnotationsValidator />
+    <EditForm Model="product" OnValidSubmit="SaveAsync">
+        <DataAnnotationsValidator />
 
-                <div class="mb-3">
-                    <label class="form-label">Name</label>
-                    <InputText class="form-control" @bind-Value="product.Name" />
+        <div class="card mb-3">
+            <div class="card-body row g-3">
+                <div class="col-md-5">
+                    <label class="form-label">Product Name</label>
+                    <InputText class="form-control" @bind-Value="product.Name" placeholder="Jemon: Cotton Polo Shirt" />
                     <ValidationMessage For="() => product.Name" />
                 </div>
-
-                <div class="mb-3">
+                <div class="col-md-2">
+                    <label class="form-label">Style Code</label>
+                    <InputText class="form-control" @bind-Value="product.Code" placeholder="PL-101" />
+                    <ValidationMessage For="() => product.Code" />
+                </div>
+                <div class="col-md-5">
                     <label class="form-label">Description</label>
-                    <InputTextArea class="form-control" rows="2" @bind-Value="product.Description" />
+                    <InputText class="form-control" @bind-Value="product.Description" placeholder="Fabric, GSM, fit..." />
                     <ValidationMessage For="() => product.Description" />
                 </div>
-
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Purchase Price (kena dam)</label>
-                        <InputNumber class="form-control" @bind-Value="product.PurchasePrice" />
-                        <ValidationMessage For="() => product.PurchasePrice" />
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Sale Price (bikri dam)</label>
-                        <InputNumber class="form-control" @bind-Value="product.Price" />
-                        <ValidationMessage For="() => product.Price" />
-                    </div>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">@(IsEdit ? "Current Stock" : "Opening Stock")</label>
-                        <InputNumber class="form-control" @bind-Value="product.Quantity" disabled="@IsEdit" />
-                        @if (IsEdit)
+                <div class="col-md-3">
+                    <label class="form-label">Category</label>
+                    <InputSelect class="form-select" @bind-Value="product.CategoryId">
+                        <option value="">-- None --</option>
+                        @foreach (var c in categories)
                         {
-                            <div class="form-text">Stock barate "Stock In", komate "Sale" use korun.</div>
+                            <option value="@c.Id">@c.Name</option>
                         }
-                        <ValidationMessage For="() => product.Quantity" />
+                    </InputSelect>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Brand</label>
+                    <InputSelect class="form-select" @bind-Value="product.BrandId">
+                        <option value="">-- None --</option>
+                        @foreach (var b in brands)
+                        {
+                            <option value="@b.Id">@b.Name</option>
+                        }
+                    </InputSelect>
+                    <div class="form-text"><a href="catalog">Category / Brand add korun</a></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header fw-semibold">Size / Color (variant)</div>
+            <div class="card-body border-bottom bg-light">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small">Sizes (comma diye)</label>
+                        <input class="form-control form-control-sm" @bind="genSizes" />
+                        <div class="mt-1 d-flex flex-wrap gap-1">
+                            @foreach (var preset in SizePresets)
+                            {
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0" @onclick="() => genSizes = preset.Value">@preset.Key</button>
+                            }
+                        </div>
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Reorder Level</label>
-                        <InputNumber class="form-control" @bind-Value="product.ReorderLevel" />
-                        <div class="form-text">Stock eto ba er kom hole "Low stock" dekhabe.</div>
-                        <ValidationMessage For="() => product.ReorderLevel" />
+                    <div class="col-md-3">
+                        <label class="form-label small">Colors (comma diye)</label>
+                        <input class="form-control form-control-sm" @bind="genColors" placeholder="Black, White, Navy" />
+                    </div>
+                    <div class="col-4 col-md-1">
+                        <label class="form-label small">Kena dam</label>
+                        <input type="number" min="0" class="form-control form-control-sm" @bind="genCost" />
+                    </div>
+                    <div class="col-4 col-md-1">
+                        <label class="form-label small">Bikri dam</label>
+                        <input type="number" min="0" class="form-control form-control-sm" @bind="genPrice" />
+                    </div>
+                    <div class="col-4 col-md-1">
+                        <label class="form-label small">Qty (protiti)</label>
+                        <input type="number" min="0" class="form-control form-control-sm" @bind="genQty" />
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-sm btn-primary" @onclick="Generate">Generate rows</button>
+                        <div class="form-text">Size x Color er shob combination add hobe.</div>
                     </div>
                 </div>
-
-                <button type="submit" class="btn btn-success" disabled="@saving">
-                    @(saving ? "Saving..." : IsEdit ? "Update" : "Save")
-                </button>
-                <a class="btn btn-secondary" href="products">Cancel</a>
-            </EditForm>
+            </div>
+            <div class="table-responsive">
+                <table class="table mb-0 align-middle table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="min-width:90px">Size</th>
+                            <th style="min-width:110px">Color</th>
+                            <th style="min-width:130px">SKU / Barcode</th>
+                            <th style="width:120px">Kena dam</th>
+                            <th style="width:120px">Bikri dam</th>
+                            <th style="width:100px">@(IsEdit ? "Stock" : "Opening Qty")</th>
+                            <th style="width:90px">Reorder</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var v in product.Variants)
+                        {
+                            <tr @key="v">
+                                <td><input class="form-control form-control-sm" @bind="v.Size" /></td>
+                                <td><input class="form-control form-control-sm" @bind="v.Color" /></td>
+                                <td><input class="form-control form-control-sm" @bind="v.Sku" placeholder="Auto" /></td>
+                                <td><input type="number" min="0" step="0.01" class="form-control form-control-sm" @bind="v.PurchasePrice" /></td>
+                                <td><input type="number" min="0" step="0.01" class="form-control form-control-sm" @bind="v.Price" /></td>
+                                <td>
+                                    @* Purono variant er stock Stock In / Sale diye change hoy *@
+                                    <input type="number" min="0" class="form-control form-control-sm" @bind="v.Quantity" disabled="@(v.Id > 0)" />
+                                </td>
+                                <td><input type="number" min="0" class="form-control form-control-sm" @bind="v.ReorderLevel" /></td>
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => product.Variants.Remove(v)">✕</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-body border-top d-flex justify-content-between align-items-center">
+                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddRow">+ Add Row</button>
+                <span class="text-muted small">@product.Variants.Count ta variant, mot @product.Variants.Sum(v => v.Quantity) pcs</span>
+            </div>
         </div>
-    </div>
+
+        @if (IsEdit)
+        {
+            <div class="form-text mb-3">Purono size/color er stock barate "Stock In", komate "Sale" use korun.</div>
+        }
+
+        <button type="submit" class="btn btn-success" disabled="@saving">
+            @(saving ? "Saving..." : IsEdit ? "Update" : "Save")
+        </button>
+        <a class="btn btn-secondary" href="products">Cancel</a>
+    </EditForm>
 }
 
 @code {
     [Parameter] public int? Id { get; set; }
 
+    private static readonly Dictionary<string, string> SizePresets = new()
+    {
+        ["S-XXL"] = "S, M, L, XL, XXL",
+        ["Pant"] = "28, 30, 32, 34, 36, 38",
+        ["Kids"] = "2Y, 4Y, 6Y, 8Y, 10Y, 12Y",
+        ["Free"] = "Free"
+    };
+
     private Product? product;
+    private List<Category> categories = new();
+    private List<Brand> brands = new();
     private string? error;
     private bool saving;
+
+    private string genSizes = "S, M, L, XL, XXL";
+    private string genColors = string.Empty;
+    private decimal genCost;
+    private decimal genPrice;
+    private int genQty;
 
     private bool IsEdit => Id.HasValue;
 
@@ -88,33 +183,88 @@ else
     {
         error = null;
 
-        if (!IsEdit)
-        {
-            product = new Product();
-            return;
-        }
-
         try
         {
-            product = await ProductService.GetByIdAsync(Id!.Value);
+            categories = await CatalogService.GetCategoriesAsync();
+            brands = await CatalogService.GetBrandsAsync();
+            product = IsEdit ? await ProductService.GetByIdAsync(Id!.Value) : new Product();
         }
         catch (Exception ex)
         {
-            error = "Product load kora jay nai: " + ex.Message;
+            error = "Data load kora jay nai: " + ex.Message;
         }
     }
 
+    private void AddRow()
+    {
+        // Ager row er dam copy kora hoy, jate barbar likhte na hoy
+        var last = product!.Variants.LastOrDefault();
+        product.Variants.Add(new ProductVariant
+        {
+            Size = string.Empty,
+            Color = last?.Color ?? string.Empty,
+            PurchasePrice = last?.PurchasePrice ?? 0,
+            Price = last?.Price ?? 0,
+            ReorderLevel = last?.ReorderLevel ?? 3
+        });
+    }
+
+    private void Generate()
+    {
+        var sizes = Split(genSizes);
+        var colors = Split(genColors);
+        if (sizes.Count == 0) sizes.Add("Free");
+        if (colors.Count == 0) colors.Add(string.Empty);
+
+        foreach (var size in sizes)
+        foreach (var color in colors)
+        {
+            var exists = product!.Variants.Any(v =>
+                string.Equals(v.Size.Trim(), size, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(v.Color.Trim(), color, StringComparison.OrdinalIgnoreCase));
+            if (exists) continue;
+
+            product.Variants.Add(new ProductVariant
+            {
+                Size = size,
+                Color = color,
+                PurchasePrice = genCost,
+                Price = genPrice,
+                Quantity = genQty
+            });
+        }
+    }
+
+    private static List<string> Split(string value) =>
+        value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
     private async Task SaveAsync()
     {
-        saving = true;
         error = null;
 
+        if (product!.Variants.Count == 0)
+        {
+            error = "Kompokkhe ekta size/color add korun (\"Generate rows\" ba \"+ Add Row\").";
+            return;
+        }
+        if (product.Variants.Any(v => string.IsNullOrWhiteSpace(v.Size)))
+        {
+            error = "Protiti row te size dite hobe.";
+            return;
+        }
+        if (product.Variants.Any(v => v.Price < 0 || v.PurchasePrice < 0 || v.Quantity < 0 || v.ReorderLevel < 0))
+        {
+            error = "Dam ba quantity negative hote parbe na.";
+            return;
+        }
+
+        saving = true;
         try
         {
             if (IsEdit)
-                await ProductService.UpdateAsync(product!);
+                await ProductService.UpdateAsync(product);
             else
-                await ProductService.CreateAsync(product!);
+                await ProductService.CreateAsync(product);
 
             Nav.NavigateTo("products");
         }

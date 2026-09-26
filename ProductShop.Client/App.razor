@@ -1,12 +1,52 @@
-<Router AppAssembly="@typeof(App).Assembly">
-    <Found Context="routeData">
-        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
-        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
-    </Found>
-    <NotFound>
-        <PageTitle>Not found</PageTitle>
-        <LayoutView Layout="@typeof(MainLayout)">
-            <p class="alert alert-warning">Sorry, ei page ta pawa jay nai.</p>
-        </LayoutView>
-    </NotFound>
-</Router>
+@using ProductShop.Client.Pages
+@inject AuthState Auth
+@inject AuthService AuthService
+@implements IDisposable
+
+@if (!ready)
+{
+    <div class="loading">Loading...</div>
+}
+else
+{
+    <Router AppAssembly="@typeof(App).Assembly">
+        <Found Context="routeData">
+            @if (!Auth.IsLoggedIn && routeData.PageType != typeof(Login))
+            {
+                <RedirectToLogin />
+            }
+            else if (!Auth.IsAdmin && Attribute.IsDefined(routeData.PageType, typeof(AdminOnlyAttribute)))
+            {
+                <LayoutView Layout="@typeof(MainLayout)">
+                    <div class="alert alert-warning">Ei page shudhu Admin er jonno.</div>
+                </LayoutView>
+            }
+            else
+            {
+                <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+                <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+            }
+        </Found>
+        <NotFound>
+            <PageTitle>Not found</PageTitle>
+            <LayoutView Layout="@typeof(MainLayout)">
+                <p class="alert alert-warning">Sorry, ei page ta pawa jay nai.</p>
+            </LayoutView>
+        </NotFound>
+    </Router>
+}
+
+@code {
+    private bool ready;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitializeAsync();
+        Auth.Changed += OnAuthChanged;
+        ready = true;
+    }
+
+    private void OnAuthChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Auth.Changed -= OnAuthChanged;
+}

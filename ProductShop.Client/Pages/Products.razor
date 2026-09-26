@@ -1,12 +1,17 @@
 @page "/products"
 @inject ProductService ProductService
+@inject CatalogService CatalogService
+@inject AuthState Auth
 @inject IJSRuntime JS
 
 <PageTitle>Products</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0">Products</h1>
-    <a class="btn btn-primary" href="product/add">+ Add Product</a>
+    @if (Auth.IsAdmin)
+    {
+        <a class="btn btn-primary" href="product/add">+ Add Product</a>
+    }
 </div>
 
 @if (!string.IsNullOrEmpty(error))
@@ -20,40 +25,76 @@
 }
 else if (products.Count == 0)
 {
-    <div class="alert alert-info">Kono product nai. Notun product add korun.</div>
+    <div class="alert alert-info">Kono product nai. @(Auth.IsAdmin ? "Notun product add korun." : "")</div>
 }
 else
 {
-    <input class="form-control mb-3" placeholder="Product name diye khujun..." @bind="search" @bind:event="oninput" />
+    <div class="row g-2 mb-3">
+        <div class="col-md-6">
+            <input class="form-control" placeholder="Naam, code ba SKU diye khujun..." @bind="search" @bind:event="oninput" />
+        </div>
+        <div class="col-6 col-md-3">
+            <select class="form-select" @bind="categoryId">
+                <option value="0">Shob category</option>
+                @foreach (var c in categories)
+                {
+                    <option value="@c.Id">@c.Name</option>
+                }
+            </select>
+        </div>
+        <div class="col-6 col-md-3">
+            <select class="form-select" @bind="brandId">
+                <option value="0">Shob brand</option>
+                @foreach (var b in brands)
+                {
+                    <option value="@b.Id">@b.Name</option>
+                }
+            </select>
+        </div>
+    </div>
 
     <div class="card">
         <div class="table-responsive">
             <table class="table table-hover mb-0 align-middle">
                 <thead class="table-light">
                     <tr>
-                        <th>#</th>
-                        <th>Name</th>
-                        <th>Description</th>
-                        <th class="text-end">Purchase Price</th>
+                        <th>Code</th>
+                        <th>Product</th>
                         <th class="text-end">Sale Price</th>
-                        <th class="text-end">Stock</th>
-                        <th class="text-end">Action</th>
+                        <th>Size / Color Stock</th>
+                        <th class="text-end">Total</th>
+                        @if (Auth.IsAdmin)
+                        {
+                            <th class="text-end">Action</th>
+                        }
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var p in Filtered)
                     {
                         <tr>
-                            <td>@p.Id</td>
-                            <td>@p.Name</td>
-                            <td>@p.Description</td>
-                            <td class="text-end">@Fmt.Money(p.PurchasePrice)</td>
-                            <td class="text-end">@Fmt.Money(p.Price)</td>
-                            <td class="text-end"><StockBadge Product="p" /></td>
-                            <td class="text-end text-nowrap">
-                                <a class="btn btn-sm btn-outline-secondary" href="product/edit/@p.Id">Edit</a>
-                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(p)">Delete</button>
+                            <td class="text-nowrap">@p.Code</td>
+                            <td>
+                                <div class="fw-semibold">@p.Name</div>
+                                <div class="small text-muted">@string.Join(" · ", new[] { p.Category?.Name, p.Brand?.Name }.Where(x => x != null))</div>
                             </td>
+                            <td class="text-end text-nowrap">@PriceRange(p)</td>
+                            <td>
+                                <div class="d-flex flex-wrap gap-1">
+                                    @foreach (var v in p.Variants)
+                                    {
+                                        <StockBadge Quantity="v.Quantity" ReorderLevel="v.ReorderLevel" Label="@v.Label" />
+                                    }
+                                </div>
+                            </td>
+                            <td class="text-end fw-semibold">@p.TotalStock</td>
+                            @if (Auth.IsAdmin)
+                            {
+                                <td class="text-end text-nowrap">
+                                    <a class="btn btn-sm btn-outline-secondary" href="product/edit/@p.Id">Edit</a>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(p)">Delete</button>
+                                </td>
+                            }
                         </tr>
                     }
                 </tbody>
@@ -64,12 +105,20 @@ else
 
 @code {
     private List<Product>? products;
+    private List<Category> categories = new();
+    private List<Brand> brands = new();
     private string? error;
     private string search = string.Empty;
+    private int categoryId;
+    private int brandId;
 
-    private IEnumerable<Product> Filtered => string.IsNullOrWhiteSpace(search)
-        ? products!
-        : products!.Where(p => p.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
+    private IEnumerable<Product> Filtered => products!
+        .Where(p => categoryId == 0 || p.CategoryId == categoryId)
+        .Where(p => brandId == 0 || p.BrandId == brandId)
+        .Where(p => string.IsNullOrWhiteSpace(search)
+                 || p.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                 || (p.Code?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+                 || p.Variants.Any(v => v.Sku?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
 
     protected override async Task OnInitializedAsync()
     {
@@ -81,12 +130,22 @@ else
         try
         {
             products = await ProductService.GetAllAsync();
+            categories = await CatalogService.GetCategoriesAsync();
+            brands = await CatalogService.GetBrandsAsync();
         }
         catch (Exception ex)
         {
             products = new List<Product>();
             error = "API theke data ana jay nai. API cholche kina check korun. (" + ex.Message + ")";
         }
+    }
+
+    private static string PriceRange(Product p)
+    {
+        if (p.Variants.Count == 0) return "-";
+        var min = p.Variants.Min(v => v.Price);
+        var max = p.Variants.Max(v => v.Price);
+        return min == max ? Fmt.Money(min) : $"{Fmt.Money(min)} - {Fmt.Money(max)}";
     }
 
     private async Task DeleteAsync(Product p)

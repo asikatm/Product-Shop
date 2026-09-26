@@ -1,4 +1,5 @@
 @page "/stock/{Id:int}"
+@attribute [AdminOnly]
 @inject StockService StockService
 @inject IJSRuntime JS
 
@@ -51,7 +52,7 @@ else
                         var item = entry.Items[i];
                         <tr>
                             <td>@(i + 1)</td>
-                            <td>@item.ProductName</td>
+                            <td>@item.ProductName <span class="text-muted">(@item.VariantName)</span></td>
                             <td class="text-end">@item.Quantity</td>
                             <td class="text-end">@Fmt.Money(item.UnitCost)</td>
                             <td class="text-end">@Fmt.Money(item.Total)</td>

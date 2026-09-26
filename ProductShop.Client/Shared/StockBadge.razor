@@ -1,16 +1,23 @@
-@if (Product.Quantity <= 0)
+@if (Quantity <= 0)
 {
-    <span class="badge bg-danger">Out (0)</span>
+    <span class="badge bg-danger">@Prefix Out</span>
 }
-else if (Product.Quantity <= Product.ReorderLevel)
+else if (Quantity <= ReorderLevel)
 {
-    <span class="badge bg-warning text-dark">@Product.Quantity</span>
+    <span class="badge bg-warning text-dark">@Prefix @Quantity</span>
 }
 else
 {
-    <span class="badge bg-success">@Product.Quantity</span>
+    <span class="badge bg-success">@Prefix @Quantity</span>
 }
 
 @code {
-    [Parameter, EditorRequired] public Product Product { get; set; } = default!;
+    [Parameter, EditorRequired] public int Quantity { get; set; }
+
+    [Parameter] public int ReorderLevel { get; set; }
+
+    // Jemon "M / Black:" - badge er age dekhay
+    [Parameter] public string? Label { get; set; }
+
+    private string? Prefix => Label == null ? null : Label + ":";
 }

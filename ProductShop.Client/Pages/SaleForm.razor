@@ -1,6 +1,7 @@
 @page "/sales/new"
 @inject ProductService ProductService
 @inject SaleService SaleService
+@inject CustomerService CustomerService
 @inject NavigationManager Nav
 
 <PageTitle>New Sale</PageTitle>
@@ -16,12 +17,23 @@
 {
     <p>Loading...</p>
 }
-else if (products.Count == 0)
+else if (options.Count == 0)
 {
-    <div class="alert alert-info">Age <a href="product/add">product add korun</a>.</div>
+    <div class="alert alert-info">Ekhono kono product nai. Admin ke product add korte bolun.</div>
 }
 else
 {
+    @* Form er baire, jate scanner er Enter e form submit na hoy *@
+    <div class="card mb-3">
+        <div class="card-body">
+            <input class="form-control form-control-lg" placeholder="Barcode / SKU scan korun ba likhe Enter chapun" @bind="scan" @bind:event="oninput" @onkeydown="OnScanKeyDown" />
+            @if (!string.IsNullOrEmpty(scanMessage))
+            {
+                <div class="small text-danger mt-1">@scanMessage</div>
+            }
+        </div>
+    </div>
+
     <EditForm Model="sale" OnValidSubmit="SaveAsync">
         <DataAnnotationsValidator />
 
@@ -31,15 +43,34 @@ else
                     <label class="form-label">Date</label>
                     <InputDate class="form-control" @bind-Value="sale.SaleDate" />
                 </div>
+                <div class="col-md-4">
+                    <label class="form-label">Customer Phone</label>
+                    <input class="form-control" list="customer-phones" placeholder="01XXXXXXXXX" @bind="sale.CustomerPhone" @bind:event="oninput" @bind:after="OnPhoneChanged" />
+                    <datalist id="customer-phones">
+                        @foreach (var c in customers)
+                        {
+                            <option value="@c.Phone">@c.Name</option>
+                        }
+                    </datalist>
+                    @if (customer != null)
+                    {
+                        <div class="small text-success mt-1">
+                            Purono customer: <a href="customers/@customer.Id" target="_blank">@customer.Name</a>
+                            @if (customer.TotalDue > 0)
+                            {
+                                <span class="text-danger"> · Ager baki @Fmt.Money(customer.TotalDue)</span>
+                            }
+                        </div>
+                    }
+                    else if (!string.IsNullOrWhiteSpace(sale.CustomerPhone))
+                    {
+                        <div class="small text-muted mt-1">Notun customer hisebe save hobe.</div>
+                    }
+                </div>
                 <div class="col-md-5">
                     <label class="form-label">Customer Name</label>
-                    <InputText class="form-control" @bind-Value="sale.CustomerName" placeholder="Walk-in customer" />
+                    <InputText class="form-control" @bind-Value="sale.CustomerName" placeholder="Walk-in customer" disabled="@(customer != null)" />
                     <ValidationMessage For="() => sale.CustomerName" />
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Phone</label>
-                    <InputText class="form-control" @bind-Value="sale.CustomerPhone" />
-                    <ValidationMessage For="() => sale.CustomerPhone" />
                 </div>
             </div>
         </div>
@@ -49,10 +80,10 @@ else
                 <table class="table mb-0 align-middle">
                     <thead class="table-light">
                         <tr>
-                            <th style="min-width:220px">Product</th>
+                            <th style="min-width:260px">Product / Size / Color</th>
                             <th class="text-end">Stock</th>
-                            <th style="width:120px">Qty</th>
-                            <th style="width:150px">Unit Price</th>
+                            <th style="width:110px">Qty</th>
+                            <th style="width:140px">Unit Price</th>
                             <th class="text-end">Total</th>
                             <th></th>
                         </tr>
@@ -60,22 +91,27 @@ else
                     <tbody>
                         @foreach (var line in sale.Items)
                         {
-                            var product = FindProduct(line.ProductId);
-                            var over = product != null && line.Quantity > product.Quantity;
+                            var option = Find(line.ProductVariantId);
+                            var over = option != null && line.Quantity > option.Variant.Quantity;
                             <tr @key="line">
                                 <td>
-                                    <select class="form-select" value="@line.ProductId" @onchange="e => OnProductChanged(line, e.Value)">
+                                    <select class="form-select" value="@line.ProductVariantId" @onchange="e => OnVariantChanged(line, e.Value)">
                                         <option value="0">-- Product select korun --</option>
                                         @foreach (var p in products)
                                         {
-                                            <option value="@p.Id" disabled="@(p.Quantity <= 0)">@p.Name (Stock: @p.Quantity)</option>
+                                            <optgroup label="@p.Name">
+                                                @foreach (var v in p.Variants)
+                                                {
+                                                    <option value="@v.Id" disabled="@(v.Quantity <= 0)">@p.Name — @v.Label (Stock: @v.Quantity)</option>
+                                                }
+                                            </optgroup>
                                         }
                                     </select>
                                 </td>
                                 <td class="text-end">
-                                    @if (product != null)
+                                    @if (option != null)
                                     {
-                                        <StockBadge Product="product" />
+                                        <StockBadge Quantity="option.Variant.Quantity" ReorderLevel="option.Variant.ReorderLevel" />
                                     }
                                     else
                                     {
@@ -95,8 +131,9 @@ else
                     </tbody>
                 </table>
             </div>
-            <div class="card-body border-top">
+            <div class="card-body border-top d-flex justify-content-between align-items-center">
                 <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddLine">+ Add Row</button>
+                <span class="text-muted">@sale.Items.Where(i => i.ProductVariantId > 0).Sum(i => i.Quantity) pcs</span>
             </div>
         </div>
 
@@ -140,6 +177,10 @@ else
                                 <span>Due (baki)</span>
                                 <strong>@Fmt.Money(GrandTotal - sale.PaidAmount)</strong>
                             </div>
+                            @if (GrandTotal - sale.PaidAmount > 0 && string.IsNullOrWhiteSpace(sale.CustomerPhone))
+                            {
+                                <div class="small text-danger mt-1">Baki rakhte customer er phone number din.</div>
+                            }
                         }
                     </div>
                 </div>
@@ -155,9 +196,14 @@ else
 
 @code {
     private List<Product>? products;
+    private Dictionary<int, VariantOption> options = new();
+    private List<Customer> customers = new();
+    private Customer? customer;
     private Sale sale = new();
     private string? error;
     private bool saving;
+    private string scan = string.Empty;
+    private string? scanMessage;
 
     private decimal SubTotal => sale.Items.Sum(i => i.Quantity * i.UnitPrice);
     private decimal GrandTotal => SubTotal - sale.Discount;
@@ -166,34 +212,93 @@ else
     {
         try
         {
-            products = await ProductService.GetAllAsync();
+            products = (await ProductService.GetAllAsync()).Where(p => p.Variants.Count > 0).ToList();
+            options = VariantOption.Build(products);
+            customers = await CustomerService.GetAllAsync();
             AddLine();
         }
         catch (Exception ex)
         {
-            error = "Product list ana jay nai: " + ex.Message;
+            error = "Data ana jay nai: " + ex.Message;
         }
     }
 
-    private Product? FindProduct(int id) => products?.FirstOrDefault(p => p.Id == id);
+    private VariantOption? Find(int variantId) => options.GetValueOrDefault(variantId);
 
     private void AddLine() => sale.Items.Add(new SaleItem { Quantity = 1 });
 
     private void PayFull() => sale.PaidAmount = GrandTotal;
 
-    private void OnProductChanged(SaleItem line, object? value)
+    // Phone mile gele purono customer select hoy
+    private void OnPhoneChanged()
     {
-        line.ProductId = int.TryParse(value?.ToString(), out var id) ? id : 0;
-        var product = FindProduct(line.ProductId);
-        line.ProductName = product?.Name ?? string.Empty;
-        line.UnitPrice = product?.Price ?? 0;
+        var phone = sale.CustomerPhone?.Trim();
+        var match = string.IsNullOrEmpty(phone) ? null : customers.FirstOrDefault(c => c.Phone == phone);
+
+        if (match != null)
+        {
+            customer = match;
+            sale.CustomerId = match.Id;
+            sale.CustomerName = match.Name;
+        }
+        else if (customer != null)
+        {
+            customer = null;
+            sale.CustomerId = null;
+            sale.CustomerName = null;
+        }
+    }
+
+    private void OnVariantChanged(SaleItem line, object? value)
+    {
+        line.ProductVariantId = int.TryParse(value?.ToString(), out var id) ? id : 0;
+        var option = Find(line.ProductVariantId);
+        line.ProductName = option?.Product.Name ?? string.Empty;
+        line.VariantName = option?.Variant.Label ?? string.Empty;
+        line.UnitPrice = option?.Variant.Price ?? 0;
+    }
+
+    private void OnScanKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter") return;
+
+        var option = VariantOption.FindBySku(options.Values, scan);
+        if (option == null)
+        {
+            scanMessage = $"'{scan}' SKU pawa jay nai.";
+            return;
+        }
+        if (option.Variant.Quantity <= 0)
+        {
+            scanMessage = $"{option.Text} er stock nai.";
+            return;
+        }
+
+        scanMessage = null;
+        scan = string.Empty;
+
+        // Same item age thakle qty bare, na hole khali row / notun row te boshe
+        var line = sale.Items.FirstOrDefault(i => i.ProductVariantId == option.Variant.Id);
+        if (line != null)
+        {
+            line.Quantity++;
+            return;
+        }
+
+        line = sale.Items.FirstOrDefault(i => i.ProductVariantId == 0);
+        if (line == null)
+        {
+            line = new SaleItem { Quantity = 1 };
+            sale.Items.Add(line);
+        }
+        OnVariantChanged(line, option.Variant.Id);
     }
 
     private async Task SaveAsync()
     {
         error = null;
 
-        var lines = sale.Items.Where(i => i.ProductId > 0).ToList();
+        var lines = sale.Items.Where(i => i.ProductVariantId > 0).ToList();
         if (lines.Count == 0)
         {
             error = "Kompokkhe ekta product select korun.";
@@ -204,13 +309,13 @@ else
             error = "Quantity 0 er beshi hote hobe.";
             return;
         }
-        foreach (var group in lines.GroupBy(i => i.ProductId))
+        foreach (var group in lines.GroupBy(i => i.ProductVariantId))
         {
-            var product = FindProduct(group.Key)!;
+            var option = Find(group.Key)!;
             var need = group.Sum(i => i.Quantity);
-            if (need > product.Quantity)
+            if (need > option.Variant.Quantity)
             {
-                error = $"'{product.Name}' er stock ache {product.Quantity}, apni diyechen {need}.";
+                error = $"'{option.Text}' er stock ache {option.Variant.Quantity}, apni diyechen {need}.";
                 return;
             }
         }
@@ -222,6 +327,11 @@ else
         if (sale.PaidAmount < 0)
         {
             error = "Paid amount negative hote parbe na.";
+            return;
+        }
+        if (GrandTotal - sale.PaidAmount > 0 && string.IsNullOrWhiteSpace(sale.CustomerPhone))
+        {
+            error = "Baki rakhte customer er phone number dite hobe.";
             return;
         }
 

@@ -33,8 +33,14 @@ public class StockEntryItem
 
     public int ProductId { get; set; }
 
+    public int ProductVariantId { get; set; }
+
     [StringLength(100)]
     public string ProductName { get; set; } = string.Empty;
+
+    // Jemon "M / Black"
+    [StringLength(60)]
+    public string VariantName { get; set; } = string.Empty;
 
     public int Quantity { get; set; } = 1;
 

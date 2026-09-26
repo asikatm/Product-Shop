@@ -1,4 +1,5 @@
 @page "/stock/new"
+@attribute [AdminOnly]
 @inject ProductService ProductService
 @inject StockService StockService
 @inject NavigationManager Nav
@@ -16,12 +17,23 @@
 {
     <p>Loading...</p>
 }
-else if (products.Count == 0)
+else if (options.Count == 0)
 {
     <div class="alert alert-info">Age <a href="product/add">product add korun</a>, tarpor stock entry din.</div>
 }
 else
 {
+    @* Form er baire, jate scanner er Enter e form submit na hoy *@
+    <div class="card mb-3">
+        <div class="card-body">
+            <input class="form-control" placeholder="Barcode / SKU scan korun ba likhe Enter chapun" @bind="scan" @bind:event="oninput" @onkeydown="OnScanKeyDown" />
+            @if (!string.IsNullOrEmpty(scanMessage))
+            {
+                <div class="small text-danger mt-1">@scanMessage</div>
+            }
+        </div>
+    </div>
+
     <EditForm Model="entry" OnValidSubmit="SaveAsync">
         <DataAnnotationsValidator />
 
@@ -49,7 +61,7 @@ else
                 <table class="table mb-0 align-middle">
                     <thead class="table-light">
                         <tr>
-                            <th style="min-width:220px">Product</th>
+                            <th style="min-width:260px">Product / Size / Color</th>
                             <th class="text-end">Current Stock</th>
                             <th style="width:120px">Qty</th>
                             <th style="width:150px">Unit Cost</th>
@@ -60,18 +72,23 @@ else
                     <tbody>
                         @foreach (var line in entry.Items)
                         {
-                            var product = FindProduct(line.ProductId);
+                            var option = Find(line.ProductVariantId);
                             <tr @key="line">
                                 <td>
-                                    <select class="form-select" value="@line.ProductId" @onchange="e => OnProductChanged(line, e.Value)">
+                                    <select class="form-select" value="@line.ProductVariantId" @onchange="e => OnVariantChanged(line, e.Value)">
                                         <option value="0">-- Product select korun --</option>
                                         @foreach (var p in products)
                                         {
-                                            <option value="@p.Id">@p.Name</option>
+                                            <optgroup label="@p.Name">
+                                                @foreach (var v in p.Variants)
+                                                {
+                                                    <option value="@v.Id">@p.Name — @v.Label</option>
+                                                }
+                                            </optgroup>
                                         }
                                     </select>
                                 </td>
-                                <td class="text-end">@(product?.Quantity.ToString() ?? "-")</td>
+                                <td class="text-end">@(option?.Variant.Quantity.ToString() ?? "-")</td>
                                 <td><input type="number" min="1" class="form-control" @bind="line.Quantity" @bind:event="oninput" /></td>
                                 <td><input type="number" min="0" step="0.01" class="form-control" @bind="line.UnitCost" /></td>
                                 <td class="text-end">@Fmt.Money(line.Quantity * line.UnitCost)</td>
@@ -85,7 +102,7 @@ else
             </div>
             <div class="card-body border-top d-flex justify-content-between align-items-center">
                 <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddLine">+ Add Row</button>
-                <span class="fs-5 fw-semibold">Total: @Fmt.Money(Total)</span>
+                <span class="fs-5 fw-semibold">@entry.Items.Sum(i => i.Quantity) pcs · Total: @Fmt.Money(Total)</span>
             </div>
         </div>
 
@@ -101,9 +118,12 @@ else
 
 @code {
     private List<Product>? products;
+    private Dictionary<int, VariantOption> options = new();
     private StockEntry entry = new();
     private string? error;
     private bool saving;
+    private string scan = string.Empty;
+    private string? scanMessage;
 
     private decimal Total => entry.Items.Sum(i => i.Quantity * i.UnitCost);
 
@@ -111,7 +131,8 @@ else
     {
         try
         {
-            products = await ProductService.GetAllAsync();
+            products = (await ProductService.GetAllAsync()).Where(p => p.Variants.Count > 0).ToList();
+            options = VariantOption.Build(products);
             AddLine();
         }
         catch (Exception ex)
@@ -120,23 +141,54 @@ else
         }
     }
 
-    private Product? FindProduct(int id) => products?.FirstOrDefault(p => p.Id == id);
+    private VariantOption? Find(int variantId) => options.GetValueOrDefault(variantId);
 
     private void AddLine() => entry.Items.Add(new StockEntryItem { Quantity = 1 });
 
-    private void OnProductChanged(StockEntryItem line, object? value)
+    private void OnVariantChanged(StockEntryItem line, object? value)
     {
-        line.ProductId = int.TryParse(value?.ToString(), out var id) ? id : 0;
-        var product = FindProduct(line.ProductId);
-        line.ProductName = product?.Name ?? string.Empty;
-        line.UnitCost = product?.PurchasePrice ?? 0;
+        line.ProductVariantId = int.TryParse(value?.ToString(), out var id) ? id : 0;
+        var option = Find(line.ProductVariantId);
+        line.ProductName = option?.Product.Name ?? string.Empty;
+        line.UnitCost = option?.Variant.PurchasePrice ?? 0;
+    }
+
+    private void OnScanKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter") return;
+
+        var option = VariantOption.FindBySku(options.Values, scan);
+        if (option == null)
+        {
+            scanMessage = $"'{scan}' SKU pawa jay nai.";
+            return;
+        }
+
+        scanMessage = null;
+        scan = string.Empty;
+
+        // Same item age thakle qty bare, na hole khali row / notun row te boshe
+        var line = entry.Items.FirstOrDefault(i => i.ProductVariantId == option.Variant.Id);
+        if (line != null)
+        {
+            line.Quantity++;
+            return;
+        }
+
+        line = entry.Items.FirstOrDefault(i => i.ProductVariantId == 0);
+        if (line == null)
+        {
+            line = new StockEntryItem { Quantity = 1 };
+            entry.Items.Add(line);
+        }
+        OnVariantChanged(line, option.Variant.Id);
     }
 
     private async Task SaveAsync()
     {
         error = null;
 
-        var lines = entry.Items.Where(i => i.ProductId > 0).ToList();
+        var lines = entry.Items.Where(i => i.ProductVariantId > 0).ToList();
         if (lines.Count == 0)
         {
             error = "Kompokkhe ekta product select korun.";

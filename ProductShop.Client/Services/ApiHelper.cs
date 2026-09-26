@@ -1,3 +1,5 @@
+using System.Net;
+
 namespace ProductShop.Client.Services;
 
 public static class ApiHelper
@@ -6,6 +8,11 @@ public static class ApiHelper
     public static async Task EnsureOkAsync(this HttpResponseMessage response)
     {
         if (response.IsSuccessStatusCode) return;
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+            throw new Exception("Login er meyad shesh, abar login korun.");
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+            throw new Exception("Apnar ei kaajer permission nai.");
 
         var message = await response.Content.ReadAsStringAsync();
         if (string.IsNullOrWhiteSpace(message))

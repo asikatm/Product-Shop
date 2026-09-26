@@ -1,0 +1,15 @@
+@page "/catalog"
+@attribute [AdminOnly]
+
+<PageTitle>Category / Brand</PageTitle>
+
+<h1 class="h3 mb-3">Category / Brand</h1>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <NameListEditor TItem="Category" Title="Category" Url="@CatalogService.CategoriesUrl" />
+    </div>
+    <div class="col-md-6">
+        <NameListEditor TItem="Brand" Title="Brand" Url="@CatalogService.BrandsUrl" />
+    </div>
+</div>

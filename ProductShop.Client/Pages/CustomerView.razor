@@ -1,0 +1,305 @@
+@page "/customers/{Id:int}"
+@inject CustomerService CustomerService
+@inject AuthState Auth
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>@(details?.Customer.Name ?? "Customer")</PageTitle>
+
+<div class="mb-3"><a href="customers">&larr; Customers</a></div>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-success">@message</div>
+}
+
+@if (details == null)
+{
+    @if (string.IsNullOrEmpty(error))
+    {
+        <p>Loading...</p>
+    }
+}
+else
+{
+    var c = details.Customer;
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0">@c.Name</h1>
+        <div>
+            <button class="btn btn-outline-secondary" @onclick="StartEdit">Edit</button>
+            @if (Auth.IsAdmin && details.Sales.Count == 0)
+            {
+                <button class="btn btn-outline-danger" @onclick="DeleteAsync">Delete</button>
+            }
+        </div>
+    </div>
+
+    @if (edit != null)
+    {
+        <div class="card mb-3">
+            <div class="card-body">
+                <EditForm Model="edit" OnValidSubmit="SaveEditAsync">
+                    <DataAnnotationsValidator />
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Name</label>
+                            <InputText class="form-control" @bind-Value="edit.Name" />
+                            <ValidationMessage For="() => edit.Name" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Phone</label>
+                            <InputText class="form-control" @bind-Value="edit.Phone" />
+                            <ValidationMessage For="() => edit.Phone" />
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label">Address</label>
+                            <InputText class="form-control" @bind-Value="edit.Address" />
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-success" disabled="@busy">Save</button>
+                        <button type="button" class="btn btn-secondary" @onclick="() => edit = null">Cancel</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    }
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card stat-card h-100"><div class="card-body">
+                <div class="label">Phone</div>
+                <div class="value fs-5">@c.Phone</div>
+                <div class="small text-muted">@c.Address</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-4">
+            <div class="card stat-card h-100"><div class="card-body">
+                <div class="label">Mot Kena (@details.Sales.Count invoice)</div>
+                <div class="value">@Fmt.Money(c.TotalPurchase)</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-4">
+            <div class="card stat-card h-100"><div class="card-body">
+                <div class="label">Baki</div>
+                <div class="value @(c.TotalDue > 0 ? "text-danger" : "text-success")">@Fmt.Money(c.TotalDue)</div>
+            </div></div>
+        </div>
+    </div>
+
+    @if (c.TotalDue > 0)
+    {
+        <div class="card mb-4 border-danger">
+            <div class="card-header">Baki joma nin</div>
+            <div class="card-body">
+                <EditForm Model="payment" OnValidSubmit="ReceiveAsync">
+                    <DataAnnotationsValidator />
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label">
+                                Amount
+                                <button type="button" class="btn btn-link btn-sm p-0 ms-1" @onclick="() => payment.Amount = c.TotalDue">(Shob baki)</button>
+                            </label>
+                            <InputNumber class="form-control" @bind-Value="payment.Amount" />
+                            <ValidationMessage For="() => payment.Amount" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Date</label>
+                            <InputDate class="form-control" @bind-Value="payment.PaymentDate" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Note</label>
+                            <InputText class="form-control" @bind-Value="payment.Note" placeholder="Cash / bKash / Nagad..." />
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-danger w-100" disabled="@busy">Joma</button>
+                        </div>
+                    </div>
+                    <div class="form-text">Shobcheye purono baki invoice theke age shodh hobe.</div>
+                </EditForm>
+            </div>
+        </div>
+    }
+
+    <div class="row g-3">
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-header">Sales</div>
+                @if (details.Sales.Count == 0)
+                {
+                    <div class="card-body text-muted">Kono sale nai.</div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr><th>Invoice</th><th>Date</th><th class="text-end">Items</th><th class="text-end">Total</th><th class="text-end">Paid</th><th class="text-end">Due</th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var s in details.Sales)
+                                {
+                                    <tr>
+                                        <td><a href="sales/@s.Id">@s.InvoiceNo</a></td>
+                                        <td>@Fmt.Date(s.SaleDate)</td>
+                                        <td class="text-end">@s.Items.Sum(i => i.Quantity) pcs</td>
+                                        <td class="text-end">@Fmt.Money(s.GrandTotal)</td>
+                                        <td class="text-end">@Fmt.Money(s.PaidAmount)</td>
+                                        <td class="text-end @(s.DueAmount > 0 ? "text-danger" : "")">@Fmt.Money(s.DueAmount)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card h-100">
+                <div class="card-header">Baki Joma History</div>
+                @if (details.Payments.Count == 0)
+                {
+                    <div class="card-body text-muted">Kono joma nai.</div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead class="table-light">
+                                <tr><th>Date</th><th>Invoice</th><th class="text-end">Amount</th><th>By</th><th></th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var p in details.Payments)
+                                {
+                                    <tr>
+                                        <td>@Fmt.Date(p.PaymentDate)</td>
+                                        <td><a href="sales/@p.SaleId">@p.InvoiceNo</a></td>
+                                        <td class="text-end">@Fmt.Money(p.Amount)</td>
+                                        <td class="small">
+                                            @p.ReceivedBy
+                                            @if (!string.IsNullOrEmpty(p.Note))
+                                            {
+                                                <div class="text-muted">@p.Note</div>
+                                            }
+                                        </td>
+                                        <td class="text-end">
+                                            @if (Auth.IsAdmin)
+                                            {
+                                                <button class="btn btn-sm btn-outline-danger py-0" title="Vul joma bad din" @onclick="() => DeletePaymentAsync(p)">✕</button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private CustomerDetails? details;
+    private Customer? edit;
+    private ReceivePaymentRequest payment = new();
+    private string? error;
+    private string? message;
+    private bool busy;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            details = await CustomerService.GetByIdAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            error = "Customer pawa jay nai: " + ex.Message;
+        }
+    }
+
+    private void StartEdit()
+    {
+        var c = details!.Customer;
+        edit = new Customer { Id = c.Id, Name = c.Name, Phone = c.Phone, Address = c.Address };
+    }
+
+    private async Task SaveEditAsync()
+    {
+        await RunAsync(async () =>
+        {
+            await CustomerService.UpdateAsync(edit!);
+            edit = null;
+            message = "Customer update hoyeche.";
+        });
+    }
+
+    private async Task ReceiveAsync()
+    {
+        await RunAsync(async () =>
+        {
+            await CustomerService.ReceivePaymentAsync(Id, payment);
+            message = $"{Fmt.Money(payment.Amount)} joma newa hoyeche.";
+            payment = new ReceivePaymentRequest();
+        });
+    }
+
+    private async Task DeletePaymentAsync(SalePayment p)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", $"{Fmt.Money(p.Amount)} joma ta bad diben? {p.InvoiceNo} e abar baki hobe.");
+        if (!ok) return;
+
+        await RunAsync(async () =>
+        {
+            await CustomerService.DeletePaymentAsync(p.Id);
+            message = "Joma bad deya hoyeche.";
+        });
+    }
+
+    private async Task DeleteAsync()
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", $"'{details!.Customer.Name}' delete korte chan?");
+        if (!ok) return;
+
+        try
+        {
+            await CustomerService.DeleteAsync(Id);
+            Nav.NavigateTo("customers");
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        busy = true;
+        error = null;
+        message = null;
+
+        try
+        {
+            await action();
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

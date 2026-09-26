@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductShop.Api.Data;
@@ -7,6 +8,7 @@ namespace ProductShop.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = Roles.Admin)]
 public class StockEntriesController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -46,7 +48,7 @@ public class StockEntriesController : ControllerBase
     }
 
     // POST: api/stockentries
-    // Save hole product er stock bare ar purchase price last cost e update hoy
+    // Save hole size/color er stock bare ar purchase price last cost e update hoy
     [HttpPost]
     public async Task<ActionResult<StockEntry>> Create(StockEntry entry)
     {
@@ -57,20 +59,25 @@ public class StockEntriesController : ControllerBase
         if (entry.Items.Any(i => i.UnitCost < 0))
             return BadRequest("Unit cost negative hote parbe na.");
 
-        var ids = entry.Items.Select(i => i.ProductId).Distinct().ToList();
-        var products = await _db.Products.Where(p => ids.Contains(p.Id)).ToDictionaryAsync(p => p.Id);
-        if (ids.Except(products.Keys).Any())
+        var ids = entry.Items.Select(i => i.ProductVariantId).Distinct().ToList();
+        var variants = await _db.ProductVariants.Where(v => ids.Contains(v.Id)).ToDictionaryAsync(v => v.Id);
+        if (ids.Except(variants.Keys).Any())
             return BadRequest("Kichu product pawa jay nai.");
+
+        var productIds = variants.Values.Select(v => v.ProductId).Distinct().ToList();
+        var productNames = await _db.Products.Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Name);
 
         foreach (var item in entry.Items)
         {
-            var product = products[item.ProductId];
+            var variant = variants[item.ProductVariantId];
             item.Id = 0;
-            item.ProductName = product.Name;
+            item.ProductId = variant.ProductId;
+            item.ProductName = productNames[variant.ProductId];
+            item.VariantName = variant.Label;
             item.Total = item.Quantity * item.UnitCost;
 
-            product.Quantity += item.Quantity;
-            product.PurchasePrice = item.UnitCost;
+            variant.Quantity += item.Quantity;
+            variant.PurchasePrice = item.UnitCost;
         }
 
         entry.Id = 0;
@@ -92,17 +99,17 @@ public class StockEntriesController : ControllerBase
         var entry = await _db.StockEntries.Include(s => s.Items).FirstOrDefaultAsync(s => s.Id == id);
         if (entry == null) return NotFound();
 
-        var ids = entry.Items.Select(i => i.ProductId).Distinct().ToList();
-        var products = await _db.Products.Where(p => ids.Contains(p.Id)).ToDictionaryAsync(p => p.Id);
+        var ids = entry.Items.Select(i => i.ProductVariantId).Distinct().ToList();
+        var variants = await _db.ProductVariants.Where(v => ids.Contains(v.Id)).ToDictionaryAsync(v => v.Id);
 
-        foreach (var group in entry.Items.GroupBy(i => i.ProductId))
+        foreach (var group in entry.Items.GroupBy(i => i.ProductVariantId))
         {
-            var product = products[group.Key];
+            var variant = variants[group.Key];
             var qty = group.Sum(i => i.Quantity);
-            if (product.Quantity < qty)
-                return BadRequest($"'{product.Name}' er ei stock theke already sale hoye geche, tai ei entry delete kora jabe na.");
+            if (variant.Quantity < qty)
+                return BadRequest($"'{group.First().ProductName} ({group.First().VariantName})' er ei stock theke already sale hoye geche, tai ei entry delete kora jabe na.");
 
-            product.Quantity -= qty;
+            variant.Quantity -= qty;
         }
 
         _db.StockEntries.Remove(entry);

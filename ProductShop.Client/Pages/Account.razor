@@ -1,0 +1,80 @@
+@page "/account"
+@inject AuthState Auth
+@inject AuthService AuthService
+
+<PageTitle>My Account</PageTitle>
+
+<h1 class="h3 mb-3">My Account</h1>
+
+<div class="row g-3">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-body">
+                <div class="mb-2"><strong>Name:</strong> @Auth.User?.FullName</div>
+                <div class="mb-2"><strong>Username:</strong> @Auth.User?.Username</div>
+                <div><strong>Role:</strong> @Auth.User?.Role</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header">Password change</div>
+            <div class="card-body">
+                @if (!string.IsNullOrEmpty(error))
+                {
+                    <div class="alert alert-danger">@error</div>
+                }
+                @if (saved)
+                {
+                    <div class="alert alert-success">Password change hoyeche.</div>
+                }
+
+                <EditForm Model="request" OnValidSubmit="SaveAsync">
+                    <DataAnnotationsValidator />
+
+                    <div class="mb-3">
+                        <label class="form-label">Current Password</label>
+                        <InputText type="password" class="form-control" @bind-Value="request.CurrentPassword" />
+                        <ValidationMessage For="() => request.CurrentPassword" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">New Password</label>
+                        <InputText type="password" class="form-control" @bind-Value="request.NewPassword" />
+                        <ValidationMessage For="() => request.NewPassword" />
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" disabled="@saving">@(saving ? "Saving..." : "Change Password")</button>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private ChangePasswordRequest request = new();
+    private string? error;
+    private bool saving;
+    private bool saved;
+
+    private async Task SaveAsync()
+    {
+        saving = true;
+        saved = false;
+        error = null;
+
+        try
+        {
+            await AuthService.ChangePasswordAsync(request);
+            request = new ChangePasswordRequest();
+            saved = true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

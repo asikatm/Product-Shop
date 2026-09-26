@@ -1,0 +1,127 @@
+@typeparam TItem where TItem : class, INamedItem, new()
+@inject CatalogService CatalogService
+@inject IJSRuntime JS
+
+@* Category / Brand er list: add, rename, delete *@
+<div class="card h-100">
+    <div class="card-header fw-semibold">@Title</div>
+    <div class="card-body">
+        @if (!string.IsNullOrEmpty(error))
+        {
+            <div class="alert alert-danger py-2">@error</div>
+        }
+
+        <div class="input-group mb-3">
+            <input class="form-control" placeholder="Notun @Title.ToLower() er naam" @bind="newName" @bind:event="oninput" @onkeydown="OnNewKeyDown" />
+            <button class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(newName)" @onclick="AddAsync">Add</button>
+        </div>
+
+        @if (items == null)
+        {
+            <p>Loading...</p>
+        }
+        else if (items.Count == 0)
+        {
+            <div class="text-muted">Kichu nai.</div>
+        }
+        else
+        {
+            <ul class="list-group">
+                @foreach (var item in items)
+                {
+                    <li class="list-group-item d-flex align-items-center gap-2" @key="item.Id">
+                        @if (editing?.Id == item.Id)
+                        {
+                            <input class="form-control form-control-sm" @bind="editing.Name" @bind:event="oninput" />
+                            <button class="btn btn-sm btn-success" @onclick="SaveEditAsync">Save</button>
+                            <button class="btn btn-sm btn-secondary" @onclick="() => editing = null">Cancel</button>
+                        }
+                        else
+                        {
+                            <span class="me-auto">@item.Name</span>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(item)">Edit</button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(item)">Delete</button>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Url { get; set; } = string.Empty;
+
+    private List<TItem>? items;
+    private TItem? editing;
+    private string newName = string.Empty;
+    private string? error;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            items = await CatalogService.GetAllAsync<TItem>(Url);
+        }
+        catch (Exception ex)
+        {
+            items = new List<TItem>();
+            error = "Data ana jay nai: " + ex.Message;
+        }
+    }
+
+    private async Task OnNewKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await AddAsync();
+    }
+
+    private async Task AddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newName)) return;
+
+        await RunAsync(async () =>
+        {
+            await CatalogService.CreateAsync(Url, new TItem { Name = newName.Trim() });
+            newName = string.Empty;
+        });
+    }
+
+    private void StartEdit(TItem item) => editing = new TItem { Id = item.Id, Name = item.Name };
+
+    private async Task SaveEditAsync()
+    {
+        if (editing == null || string.IsNullOrWhiteSpace(editing.Name)) return;
+
+        await RunAsync(async () =>
+        {
+            await CatalogService.UpdateAsync(Url, editing);
+            editing = null;
+        });
+    }
+
+    private async Task DeleteAsync(TItem item)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", $"'{item.Name}' delete korte chan?");
+        if (!ok) return;
+
+        await RunAsync(() => CatalogService.DeleteAsync(Url, item.Id));
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        try
+        {
+            error = null;
+            await action();
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+}

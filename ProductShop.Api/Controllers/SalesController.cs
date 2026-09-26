@@ -1,6 +1,8 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductShop.Api.Data;
+using ProductShop.Api.Services;
 using ProductShop.Shared;
 
 namespace ProductShop.Api.Controllers;
@@ -20,7 +22,7 @@ public class SalesController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<Sale>>> GetAll(DateTime? from, DateTime? to)
     {
-        var query = _db.Sales.Include(s => s.Items).AsQueryable();
+        var query = _db.Sales.AsNoTracking().Include(s => s.Items).AsQueryable();
 
         if (from.HasValue)
             query = query.Where(s => s.SaleDate >= from.Value.Date);
@@ -30,23 +32,30 @@ public class SalesController : ControllerBase
             query = query.Where(s => s.SaleDate < end);
         }
 
-        return await query
+        var sales = await query
             .OrderByDescending(s => s.SaleDate)
             .ThenByDescending(s => s.Id)
             .ToListAsync();
+        HideCost(sales);
+        return sales;
     }
 
     // GET: api/sales/5
     [HttpGet("{id:int}")]
     public async Task<ActionResult<Sale>> GetById(int id)
     {
-        var sale = await _db.Sales.Include(s => s.Items).FirstOrDefaultAsync(s => s.Id == id);
+        var sale = await _db.Sales.AsNoTracking()
+            .Include(s => s.Items)
+            .Include(s => s.Payments.OrderBy(p => p.PaymentDate).ThenBy(p => p.Id))
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(s => s.Id == id);
         if (sale == null) return NotFound();
+        HideCost(new[] { sale });
         return sale;
     }
 
     // POST: api/sales
-    // Save hole product er stock kome jay
+    // Save hole size/color er stock kome jay
     [HttpPost]
     public async Task<ActionResult<Sale>> Create(Sale sale)
     {
@@ -57,28 +66,33 @@ public class SalesController : ControllerBase
         if (sale.Items.Any(i => i.UnitPrice < 0))
             return BadRequest("Unit price negative hote parbe na.");
 
-        var ids = sale.Items.Select(i => i.ProductId).Distinct().ToList();
-        var products = await _db.Products.Where(p => ids.Contains(p.Id)).ToDictionaryAsync(p => p.Id);
-        if (ids.Except(products.Keys).Any())
+        var ids = sale.Items.Select(i => i.ProductVariantId).Distinct().ToList();
+        var variants = await _db.ProductVariants.Where(v => ids.Contains(v.Id)).ToDictionaryAsync(v => v.Id);
+        if (ids.Except(variants.Keys).Any())
             return BadRequest("Kichu product pawa jay nai.");
 
-        foreach (var group in sale.Items.GroupBy(i => i.ProductId))
+        var productIds = variants.Values.Select(v => v.ProductId).Distinct().ToList();
+        var productNames = await _db.Products.Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Name);
+
+        foreach (var group in sale.Items.GroupBy(i => i.ProductVariantId))
         {
-            var product = products[group.Key];
+            var variant = variants[group.Key];
             var need = group.Sum(i => i.Quantity);
-            if (product.Quantity < need)
-                return BadRequest($"'{product.Name}' er stock ache {product.Quantity}, kintu chawa hoyeche {need}.");
+            if (variant.Quantity < need)
+                return BadRequest($"'{productNames[variant.ProductId]} ({variant.Label})' er stock ache {variant.Quantity}, kintu chawa hoyeche {need}.");
         }
 
         foreach (var item in sale.Items)
         {
-            var product = products[item.ProductId];
+            var variant = variants[item.ProductVariantId];
             item.Id = 0;
-            item.ProductName = product.Name;
-            item.CostPrice = product.PurchasePrice;
+            item.ProductId = variant.ProductId;
+            item.ProductName = productNames[variant.ProductId];
+            item.VariantName = variant.Label;
+            item.CostPrice = variant.PurchasePrice;
             item.Total = item.Quantity * item.UnitPrice;
 
-            product.Quantity -= item.Quantity;
+            variant.Quantity -= item.Quantity;
         }
 
         sale.SubTotal = sale.Items.Sum(i => i.Total);
@@ -93,10 +107,40 @@ public class SalesController : ControllerBase
         sale.GrandTotal = sale.SubTotal - sale.Discount;
         sale.PaidAmount = Math.Min(sale.PaidAmount, sale.GrandTotal);
         sale.DueAmount = sale.GrandTotal - sale.PaidAmount;
+        sale.SoldBy = User.DisplayName();
+        sale.Payments = new();
         sale.InvoiceNo = "TEMP";
+
+        // Customer: Id dile oi customer, na hole phone diye khuje / notun banay
+        var name = sale.CustomerName?.Trim();
+        var phone = sale.CustomerPhone?.Trim();
+        Customer? customer = null;
+        if (sale.CustomerId.HasValue)
+        {
+            customer = await _db.Customers.FindAsync(sale.CustomerId.Value);
+            if (customer == null) return BadRequest("Customer pawa jay nai.");
+        }
+        else if (!string.IsNullOrEmpty(phone))
+        {
+            customer = await _db.Customers.FirstOrDefaultAsync(c => c.Phone == phone)
+                    ?? new Customer { Name = string.IsNullOrEmpty(name) ? "Customer" : name, Phone = phone };
+        }
+
+        if (sale.DueAmount > 0 && customer == null)
+            return BadRequest("Baki rakhte customer er phone number dite hobe.");
 
         // Invoice no er jonno Id lage, tai duibar save; transaction e rakha holo
         await using var tx = await _db.Database.BeginTransactionAsync();
+        if (customer != null && customer.Id == 0)
+        {
+            _db.Customers.Add(customer);
+            await _db.SaveChangesAsync();
+        }
+
+        sale.CustomerId = customer?.Id;
+        sale.CustomerName = customer?.Name ?? (string.IsNullOrEmpty(name) ? null : name);
+        sale.CustomerPhone = customer?.Phone;
+
         _db.Sales.Add(sale);
         await _db.SaveChangesAsync();
         sale.InvoiceNo = $"INV-{sale.Id:D6}";
@@ -109,19 +153,29 @@ public class SalesController : ControllerBase
     // DELETE: api/sales/5
     // Delete hole stock ferot ashe
     [HttpDelete("{id:int}")]
+    [Authorize(Roles = Roles.Admin)]
     public async Task<IActionResult> Delete(int id)
     {
         var sale = await _db.Sales.Include(s => s.Items).FirstOrDefaultAsync(s => s.Id == id);
         if (sale == null) return NotFound();
 
-        var ids = sale.Items.Select(i => i.ProductId).Distinct().ToList();
-        var products = await _db.Products.Where(p => ids.Contains(p.Id)).ToDictionaryAsync(p => p.Id);
+        var ids = sale.Items.Select(i => i.ProductVariantId).Distinct().ToList();
+        var variants = await _db.ProductVariants.Where(v => ids.Contains(v.Id)).ToDictionaryAsync(v => v.Id);
 
         foreach (var item in sale.Items)
-            products[item.ProductId].Quantity += item.Quantity;
+            variants[item.ProductVariantId].Quantity += item.Quantity;
 
+        // Items ar payments cascade e delete hoye jay
         _db.Sales.Remove(sale);
         await _db.SaveChangesAsync();
         return NoContent();
+    }
+
+    // Kena dam shudhu admin dekhbe
+    private void HideCost(IEnumerable<Sale> sales)
+    {
+        if (User.IsInRole(Roles.Admin)) return;
+        foreach (var item in sales.SelectMany(s => s.Items))
+            item.CostPrice = 0;
     }
 }
