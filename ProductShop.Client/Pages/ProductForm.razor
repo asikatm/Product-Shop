@@ -1,0 +1,112 @@
+@page "/product/add"
+@page "/product/edit/{Id:int}"
+@inject ProductService ProductService
+@inject NavigationManager Nav
+
+<PageTitle>@(IsEdit ? "Edit Product" : "Add Product")</PageTitle>
+
+<h1 class="h3 mb-3">@(IsEdit ? "Edit Product" : "Add Product")</h1>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (product == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="card">
+        <div class="card-body">
+            <EditForm Model="product" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+
+                <div class="mb-3">
+                    <label class="form-label">Name</label>
+                    <InputText class="form-control" @bind-Value="product.Name" />
+                    <ValidationMessage For="() => product.Name" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <InputTextArea class="form-control" rows="3" @bind-Value="product.Description" />
+                    <ValidationMessage For="() => product.Description" />
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Price</label>
+                        <InputNumber class="form-control" @bind-Value="product.Price" />
+                        <ValidationMessage For="() => product.Price" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Quantity</label>
+                        <InputNumber class="form-control" @bind-Value="product.Quantity" />
+                        <ValidationMessage For="() => product.Quantity" />
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-success" disabled="@saving">
+                    @(saving ? "Saving..." : IsEdit ? "Update" : "Save")
+                </button>
+                <a class="btn btn-secondary" href="">Cancel</a>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private Product? product;
+    private string? error;
+    private bool saving;
+
+    private bool IsEdit => Id.HasValue;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        error = null;
+
+        if (!IsEdit)
+        {
+            product = new Product();
+            return;
+        }
+
+        try
+        {
+            product = await ProductService.GetByIdAsync(Id!.Value);
+        }
+        catch (Exception ex)
+        {
+            error = "Product load kora jay nai: " + ex.Message;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        saving = true;
+        error = null;
+
+        try
+        {
+            if (IsEdit)
+                await ProductService.UpdateAsync(product!);
+            else
+                await ProductService.CreateAsync(product!);
+
+            Nav.NavigateTo("");
+        }
+        catch (Exception ex)
+        {
+            error = "Save kora jay nai: " + ex.Message;
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}
