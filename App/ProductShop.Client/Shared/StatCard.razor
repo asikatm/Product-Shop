@@ -1,0 +1,27 @@
+@* Dashboard er ekta sonkha: icon + label + value *@
+<div class="stat">
+    <div class="stat-icon tone-@Tone"><i class="bi @Icon"></i></div>
+    <div class="min-w-0">
+        <div class="stat-label">@Label</div>
+        <div class="stat-value @ValueClass">@Value</div>
+        @if (ChildContent != null)
+        {
+            <div class="stat-sub">@ChildContent</div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+
+    // primary, success, danger, warning, info, purple
+    [Parameter] public string Tone { get; set; } = "primary";
+
+    [Parameter] public string? ValueClass { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

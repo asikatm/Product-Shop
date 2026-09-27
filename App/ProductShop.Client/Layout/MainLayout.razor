@@ -1,0 +1,122 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject AuthState Auth
+@inject AuthService AuthService
+@inject NavigationManager Nav
+@inject IConfiguration Config
+
+<div class="app-shell @(menuOpen ? "menu-open" : "")">
+    <aside class="app-sidebar no-print">
+        <a class="app-brand" href="">
+            <span class="app-brand-logo"><i class="bi bi-bag-heart"></i></span>
+            <span>
+                <span class="app-brand-name d-block">@ShopName</span>
+                <span class="app-brand-sub">Sales &amp; inventory</span>
+            </span>
+        </a>
+
+        <nav class="app-nav">
+            <div class="app-nav-section">Main</div>
+            <NavLink class="app-nav-link" href="" Match="NavLinkMatch.All"><i class="bi bi-grid-1x2"></i> Dashboard</NavLink>
+            <NavLink class="app-nav-link" href="sales/new"><i class="bi bi-cart-plus"></i> New Sale</NavLink>
+            <NavLink class="app-nav-link" href="sales" Match="NavLinkMatch.All"><i class="bi bi-receipt"></i> Sales</NavLink>
+            <NavLink class="app-nav-link" href="customers"><i class="bi bi-people"></i> Customers</NavLink>
+
+            <div class="app-nav-section">Inventory</div>
+            <NavLink class="app-nav-link" href="products"><i class="bi bi-box-seam"></i> Products</NavLink>
+            @if (Auth.IsAdmin)
+            {
+                <NavLink class="app-nav-link" href="product/add"><i class="bi bi-plus-square"></i> Add Product</NavLink>
+                <NavLink class="app-nav-link" href="stock"><i class="bi bi-truck"></i> Stock In</NavLink>
+                <NavLink class="app-nav-link" href="catalog"><i class="bi bi-tags"></i> Category / Brand</NavLink>
+
+                <div class="app-nav-section">Settings</div>
+                <NavLink class="app-nav-link" href="users"><i class="bi bi-person-gear"></i> Users</NavLink>
+            }
+            <NavLink class="app-nav-link" href="account"><i class="bi bi-shield-lock"></i> My Account</NavLink>
+        </nav>
+
+        <div class="app-sidebar-foot">© @DateTime.Today.Year @ShopName</div>
+    </aside>
+
+    <div class="app-backdrop" @onclick="() => menuOpen = false"></div>
+
+    <div class="app-main">
+        <header class="app-topbar no-print">
+            <button class="app-icon-btn d-lg-none" title="Menu" @onclick="() => menuOpen = !menuOpen"><i class="bi bi-list"></i></button>
+            <div class="app-topbar-date d-none d-sm-block"><i class="bi bi-calendar3 me-1"></i> @DateTime.Today.ToString("dddd, dd MMMM yyyy")</div>
+
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <a class="btn btn-primary btn-sm px-3" href="sales/new"><i class="bi bi-plus-lg me-1"></i><span class="d-none d-sm-inline">New Sale</span></a>
+
+                <div class="app-user">
+                    <button class="app-user-btn" @onclick="() => userMenuOpen = !userMenuOpen">
+                        <span class="app-avatar">@Initials</span>
+                        <span class="d-none d-md-block">
+                            <span class="app-user-name d-block">@Auth.User?.FullName</span>
+                            <span class="app-user-role d-block">@Auth.User?.Role</span>
+                        </span>
+                        <i class="bi bi-chevron-down small text-muted d-none d-md-block"></i>
+                    </button>
+
+                    @if (userMenuOpen)
+                    {
+                        <div class="app-click-away" @onclick="() => userMenuOpen = false"></div>
+                        <div class="app-menu">
+                            <div class="px-2 py-1 mb-1 border-bottom">
+                                <div class="fw-semibold small">@Auth.User?.FullName</div>
+                                <div class="text-muted small">@@@Auth.User?.Username</div>
+                            </div>
+                            <a href="account" @onclick="() => userMenuOpen = false"><i class="bi bi-shield-lock"></i> Password change</a>
+                            <button class="text-danger" @onclick="LogoutAsync"><i class="bi bi-box-arrow-right"></i> Logout</button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </header>
+
+        <main class="app-content">
+            @Body
+        </main>
+    </div>
+</div>
+
+@code {
+    private bool menuOpen;
+    private bool userMenuOpen;
+
+    private string ShopName => Config["Shop:Name"] ?? "Garments Showroom";
+
+    private string Initials
+    {
+        get
+        {
+            var parts = (Auth.User?.FullName ?? "?").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length switch
+            {
+                0 => "?",
+                1 => parts[0][..1].ToUpperInvariant(),
+                _ => (parts[0][..1] + parts[^1][..1]).ToUpperInvariant()
+            };
+        }
+    }
+
+    protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
+
+    // Onno page e gele mobile menu ar user menu bondho hoye jay
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        menuOpen = false;
+        userMenuOpen = false;
+        StateHasChanged();
+    }
+
+    private async Task LogoutAsync()
+    {
+        userMenuOpen = false;
+        await AuthService.LogoutAsync();
+        Nav.NavigateTo("login");
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

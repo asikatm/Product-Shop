@@ -1,0 +1,173 @@
+@page "/"
+@inject SaleService SaleService
+@inject AuthState Auth
+
+<PageTitle>Dashboard</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1 class="h3">@Greeting, @(Auth.User?.FullName.Split(' ')[0])</h1>
+        <div class="page-sub">Ajker showroom er hisab ek nojore.</div>
+    </div>
+    <div class="d-flex gap-2">
+        @if (Auth.IsAdmin)
+        {
+            <a class="btn btn-outline-secondary" href="product/add"><i class="bi bi-plus-square me-1"></i> Add Product</a>
+        }
+        <a class="btn btn-primary" href="sales/new"><i class="bi bi-cart-plus me-1"></i> New Sale</a>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (summary == null)
+{
+    @if (string.IsNullOrEmpty(error))
+    {
+        <div class="loading">Loading...</div>
+    }
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3">
+            <StatCard Icon="bi-cash-stack" Tone="primary" Label="Ajker sale" Value="@Fmt.Money(summary.TodaySales)">@summary.TodayInvoices ta invoice</StatCard>
+        </div>
+        @if (Auth.IsAdmin)
+        {
+            <div class="col-6 col-xl-3">
+                <StatCard Icon="bi-graph-up-arrow" Tone="success" Label="Ajker profit" Value="@Fmt.Money(summary.TodayProfit)" ValueClass="@(summary.TodayProfit < 0 ? "text-danger" : "")">Discount bad diye</StatCard>
+            </div>
+        }
+        <div class="col-6 col-xl-3">
+            <StatCard Icon="bi-wallet2" Tone="info" Label="Ajker baki joma" Value="@Fmt.Money(summary.TodayCollection)">Customer theke paoa</StatCard>
+        </div>
+        <div class="col-6 col-xl-3">
+            <StatCard Icon="bi-calendar-check" Tone="purple" Label="Ei maser sale" Value="@Fmt.Money(summary.MonthSales)">
+                @if (Auth.IsAdmin)
+                {
+                    <span>Profit @Fmt.Money(summary.MonthProfit)</span>
+                }
+                else
+                {
+                    <span>@DateTime.Today.ToString("MMMM yyyy")</span>
+                }
+            </StatCard>
+        </div>
+        <div class="col-6 col-xl-3">
+            <StatCard Icon="bi-exclamation-diamond" Tone="danger" Label="Mot baki (due)" Value="@Fmt.Money(summary.TotalDue)" ValueClass="text-danger">
+                <a href="customers">@summary.TotalCustomers jon customer</a>
+            </StatCard>
+        </div>
+        <div class="col-6 col-xl-3">
+            <StatCard Icon="bi-box-seam" Tone="primary" Label="Products" Value="@summary.TotalProducts.ToString()">@summary.TotalVariants ta size/color</StatCard>
+        </div>
+        <div class="col-6 col-xl-3">
+            <StatCard Icon="bi-stack" Tone="success" Label="Mot stock" Value="@($"{summary.TotalStockQty} pcs")">
+                @if (Auth.IsAdmin)
+                {
+                    <span>Kena dame @Fmt.Money(summary.StockValue)</span>
+                }
+            </StatCard>
+        </div>
+        <div class="col-6 col-xl-3">
+            <StatCard Icon="bi-exclamation-triangle" Tone="warning" Label="Low stock" Value="@summary.LowStockCount.ToString()" ValueClass="@(summary.LowStockCount > 0 ? "text-warning" : "")">Size/color reorder level e</StatCard>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-5">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between">
+                    <span>Low Stock</span>
+                    @if (Auth.IsAdmin)
+                    {
+                        <a href="stock/new">Stock In</a>
+                    }
+                </div>
+                @if (summary.LowStockItems.Count == 0)
+                {
+                    <div class="card-body text-muted">Shob product er stock thik ache.</div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                        <thead class="table-light"><tr><th>Product</th><th>Size / Color</th><th class="text-end">Stock</th><th class="text-end">Reorder</th></tr></thead>
+                        <tbody>
+                            @foreach (var item in summary.LowStockItems)
+                            {
+                                <tr>
+                                    <td>@item.ProductName</td>
+                                    <td>@item.VariantName</td>
+                                    <td class="text-end"><StockBadge Quantity="item.Quantity" ReorderLevel="item.ReorderLevel" /></td>
+                                    <td class="text-end">@item.ReorderLevel</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    </div>
+                }
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between">
+                    <span>Recent Sales</span>
+                    <a href="sales">Shob dekhun</a>
+                </div>
+                @if (summary.RecentSales.Count == 0)
+                {
+                    <div class="card-body text-muted">Ekhono kono sale nai.</div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light"><tr><th>Invoice</th><th>Date</th><th>Customer</th><th class="text-end">Total</th><th class="text-end">Due</th></tr></thead>
+                        <tbody>
+                            @foreach (var s in summary.RecentSales)
+                            {
+                                <tr>
+                                    <td><a href="sales/@s.Id">@s.InvoiceNo</a></td>
+                                    <td>@Fmt.Date(s.SaleDate)</td>
+                                    <td>@(s.CustomerName ?? "Walk-in")</td>
+                                    <td class="text-end">@Fmt.Money(s.GrandTotal)</td>
+                                    <td class="text-end">@Fmt.Money(s.DueAmount)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private DashboardSummary? summary;
+    private string? error;
+
+    private static string Greeting => DateTime.Now.Hour switch
+    {
+        < 12 => "Good morning",
+        < 17 => "Good afternoon",
+        _ => "Good evening"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            summary = await SaleService.GetDashboardAsync();
+        }
+        catch (Exception ex)
+        {
+            error = "API theke data ana jay nai. API cholche kina check korun. (" + ex.Message + ")";
+        }
+    }
+}

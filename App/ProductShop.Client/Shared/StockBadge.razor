@@ -1,0 +1,23 @@
+@if (Quantity <= 0)
+{
+    <span class="badge bg-danger-subtle text-danger-emphasis">@Prefix Out</span>
+}
+else if (Quantity <= ReorderLevel)
+{
+    <span class="badge bg-warning-subtle text-warning-emphasis">@Prefix @Quantity</span>
+}
+else
+{
+    <span class="badge bg-success-subtle text-success-emphasis">@Prefix @Quantity</span>
+}
+
+@code {
+    [Parameter, EditorRequired] public int Quantity { get; set; }
+
+    [Parameter] public int ReorderLevel { get; set; }
+
+    // Jemon "M / Black:" - badge er age dekhay
+    [Parameter] public string? Label { get; set; }
+
+    private string? Prefix => Label == null ? null : Label + ":";
+}

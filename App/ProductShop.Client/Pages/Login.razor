@@ -1,0 +1,125 @@
+@page "/login"
+@layout EmptyLayout
+@inject AuthState Auth
+@inject AuthService AuthService
+@inject NavigationManager Nav
+@inject IConfiguration Config
+
+<PageTitle>Login</PageTitle>
+
+<div class="login-shell">
+    <div class="login-hero">
+        <div class="d-flex align-items-center gap-2">
+            <span class="app-brand-logo"><i class="bi bi-bag-heart"></i></span>
+            <span class="fw-bold">@ShopName</span>
+        </div>
+
+        <div>
+            <h2 class="mb-4">Apnar showroom er sale, stock ar customer — ek jaygay.</h2>
+            <div class="login-feature"><i class="bi bi-palette"></i><span>Size / color onujayi stock ar dam</span></div>
+            <div class="login-feature"><i class="bi bi-upc-scan"></i><span>Barcode scan kore druto sale ar invoice print</span></div>
+            <div class="login-feature"><i class="bi bi-people"></i><span>Customer er baki hisab ar joma</span></div>
+            <div class="login-feature"><i class="bi bi-graph-up-arrow"></i><span>Ajker sale, profit ar low stock ek nojore</span></div>
+        </div>
+
+        <div class="small text-secondary">© @DateTime.Today.Year @ShopName</div>
+    </div>
+
+    <div class="login-form">
+        <div class="login-card">
+            <div class="d-lg-none d-flex align-items-center gap-2 mb-4">
+                <span class="app-brand-logo text-white"><i class="bi bi-bag-heart"></i></span>
+                <span class="fw-bold">@ShopName</span>
+            </div>
+
+            <h1 class="h3 mb-1">Welcome back 👋</h1>
+            <p class="text-muted mb-4">Login kore kaaj shuru korun.</p>
+
+            @if (!string.IsNullOrEmpty(error))
+            {
+                <div class="alert alert-danger d-flex gap-2"><i class="bi bi-exclamation-circle-fill"></i><span>@error</span></div>
+            }
+
+            <EditForm Model="request" OnValidSubmit="LoginAsync">
+                <DataAnnotationsValidator />
+
+                <div class="mb-3">
+                    <label class="form-label">Username</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-person"></i></span>
+                        <InputText class="form-control" @bind-Value="request.Username" autocomplete="username" placeholder="admin" />
+                    </div>
+                    <ValidationMessage For="() => request.Username" />
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label">Password</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                        <InputText type="@(showPassword ? "text" : "password")" class="form-control" @bind-Value="request.Password" autocomplete="current-password" placeholder="••••••••" />
+                        <button type="button" class="btn btn-outline-secondary" title="@(showPassword ? "Lukan" : "Dekhun")" @onclick="() => showPassword = !showPassword">
+                            <i class="bi @(showPassword ? "bi-eye-slash" : "bi-eye")"></i>
+                        </button>
+                    </div>
+                    <ValidationMessage For="() => request.Password" />
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg w-100" disabled="@busy">
+                    @if (busy)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span><span>Please wait...</span>
+                    }
+                    else
+                    {
+                        <span>Login</span><i class="bi bi-arrow-right ms-2"></i>
+                    }
+                </button>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    private LoginRequest request = new();
+    private string? error;
+    private bool busy;
+    private bool showPassword;
+
+    private string ShopName => Config["Shop:Name"] ?? "Garments Showroom";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Auth.IsLoggedIn)
+        {
+            Nav.NavigateTo("");
+            return;
+        }
+
+        // Meyad shesh howa purono token thakle muche fela
+        await AuthService.LogoutAsync();
+    }
+
+    private async Task LoginAsync()
+    {
+        busy = true;
+        error = null;
+
+        try
+        {
+            await AuthService.LoginAsync(request);
+            Nav.NavigateTo("");
+        }
+        catch (HttpRequestException)
+        {
+            error = "API er sathe connect kora jay nai. API cholche kina check korun.";
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

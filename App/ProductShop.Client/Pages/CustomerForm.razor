@@ -1,0 +1,493 @@
+@page "/customers/new"
+@page "/customers/edit/{Id:int}"
+@inject CustomerService CustomerService
+@inject NavigationManager Nav
+
+<PageTitle>@(IsEdit ? "Edit customer" : "Add new customer")</PageTitle>
+
+<div class="pf">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+        <div>
+            <h1 class="h4 mb-0">@(IsEdit ? "Edit customer" : "Add new customer")</h1>
+            <div class="pf-crumb">
+                <a href="">Dashboard</a> / <a href="customers">Customers</a> / @(IsEdit ? "Edit" : "Add")
+            </div>
+        </div>
+        @if (customer != null)
+        {
+            <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-light border" href="@CancelUrl">Cancel</a>
+                @if (!IsEdit)
+                {
+                    <button type="button" class="btn btn-outline-secondary bg-white text-dark" disabled="@saving" @onclick="() => SaveAsync(true)">
+                        Save &amp; add another
+                    </button>
+                }
+                <button type="button" class="btn btn-primary px-3" disabled="@saving" @onclick="() => SaveAsync(false)">
+                    <i class="bi bi-check2 me-1"></i>@(saving ? "Saving..." : IsEdit ? "Update customer" : "Save customer")
+                </button>
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(savedMessage))
+    {
+        <div class="alert alert-success d-flex align-items-center gap-2">
+            <i class="bi bi-check-circle-fill"></i>
+            <span>@savedMessage</span>
+            <a class="ms-auto" href="customers/@savedId">Dekhun</a>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(error))
+    {
+        <div class="alert alert-danger d-flex align-items-center gap-2">
+            <i class="bi bi-exclamation-triangle-fill"></i> @error
+        </div>
+    }
+
+    @if (customer == null)
+    {
+        @if (string.IsNullOrEmpty(error))
+        {
+            <p>Loading...</p>
+        }
+    }
+    else
+    {
+        @* Enter chaple save hoy *@
+        <form @onsubmit="() => SaveAsync(false)" @onsubmit:preventDefault autocomplete="off">
+            <div class="row g-3">
+                <div class="col-lg-8">
+
+                    @* ---------- Basic information ---------- *@
+                    <section class="pf-card">
+                        <h2 class="pf-title"><i class="bi bi-person-vcard"></i> Basic information</h2>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="pf-label" for="cf-name">Full name <span class="req">*</span></label>
+                                <div class="input-group has-validation">
+                                    <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                    <input id="cf-name" class="form-control @Cls("Name")" @ref="nameInput"
+                                           @bind="customer.Name" @bind:event="oninput" @onblur="() => Touch(nameof(Customer.Name))"
+                                           placeholder="Jemon: Md. Karim Hossain" maxlength="100" />
+                                    @Err("Name")
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="pf-label" for="cf-phone">Mobile number <span class="req">*</span></label>
+                                <div class="input-group has-validation">
+                                    <span class="input-group-text"><i class="bi bi-phone"></i></span>
+                                    <input id="cf-phone" type="tel" inputmode="numeric" class="form-control @PhoneCls"
+                                           @bind="customer.Phone" @bind:event="oninput" @onblur="() => OnPhoneBlur()"
+                                           placeholder="01XXXXXXXXX" maxlength="20" />
+                                    @Err("Phone")
+                                </div>
+                                @if (duplicate != null)
+                                {
+                                    <div class="small text-danger mt-1">
+                                        <i class="bi bi-person-exclamation"></i>
+                                        Ei number e already <a href="customers/@duplicate.Id" target="_blank">@duplicate.Name</a> ache.
+                                    </div>
+                                }
+                                else if (PhoneOk)
+                                {
+                                    <div class="small text-success mt-1"><i class="bi bi-check-circle"></i> @PhoneHelper.Pretty(NormalizedPhone)</div>
+                                }
+                                else if (!Show("Phone"))
+                                {
+                                    <div class="pf-hint mt-1">11 digit, 01 diye shuru. Sale e ei number diye customer khuja hoy.</div>
+                                }
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="pf-label" for="cf-alt">Alternate mobile</label>
+                                <div class="input-group has-validation">
+                                    <span class="input-group-text"><i class="bi bi-telephone"></i></span>
+                                    <input id="cf-alt" type="tel" inputmode="numeric" class="form-control @Cls("AltPhone")"
+                                           @bind="customer.AltPhone" @bind:event="oninput" @onblur="() => OnAltPhoneBlur()"
+                                           placeholder="Optional" maxlength="20" />
+                                    @Err("AltPhone")
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="pf-label" for="cf-email">Email</label>
+                                <div class="input-group has-validation">
+                                    <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                    <input id="cf-email" type="email" class="form-control @Cls("Email")"
+                                           @bind="customer.Email" @bind:event="oninput" @onblur="() => Touch(nameof(Customer.Email))"
+                                           placeholder="name@example.com" maxlength="100" />
+                                    @Err("Email")
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    @* ---------- Customer type ---------- *@
+                    <section class="pf-card">
+                        <h2 class="pf-title"><i class="bi bi-award"></i> Customer type</h2>
+                        <div class="row g-2">
+                            @foreach (var t in TypeCards)
+                            {
+                                <div class="col-sm-4">
+                                    <button type="button" class="cf-type @(customer.CustomerType == t.Value ? "active" : "")" @onclick="() => customer.CustomerType = t.Value">
+                                        <i class="bi @t.Icon"></i>
+                                        <span class="cf-type-name">@t.Value</span>
+                                        <span class="cf-type-desc">@t.Description</span>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </section>
+
+                    @* ---------- Personal details ---------- *@
+                    <section class="pf-card">
+                        <h2 class="pf-title"><i class="bi bi-person-heart"></i> Personal details <span class="pf-hint fw-normal ms-1">(optional)</span></h2>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="pf-label">Gender</label>
+                                <div class="d-flex flex-wrap gap-2">
+                                    @foreach (var g in CustomerOptions.Genders)
+                                    {
+                                        <button type="button" class="pf-chip @(customer.Gender == g ? "active" : "")" @onclick="() => ToggleGender(g)">@g</button>
+                                    }
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="pf-label" for="cf-dob">Date of birth</label>
+                                <input id="cf-dob" type="date" class="form-control @Cls("DateOfBirth")" max="@DateTime.Today.ToString("yyyy-MM-dd")"
+                                       @bind="customer.DateOfBirth" @bind:after="() => Touch(nameof(Customer.DateOfBirth))" />
+                                @Err("DateOfBirth")
+                                @if (Age is int age && !Show("DateOfBirth"))
+                                {
+                                    <div class="pf-hint mt-1">Boyosh @age bochor · Jonmodin e offer pathano jabe.</div>
+                                }
+                            </div>
+                        </div>
+                    </section>
+
+                    @* ---------- Address ---------- *@
+                    <section class="pf-card">
+                        <h2 class="pf-title"><i class="bi bi-geo-alt"></i> Address <span class="pf-hint fw-normal ms-1">(optional)</span></h2>
+                        <div class="row g-3">
+                            <div class="col-md-8">
+                                <label class="pf-label" for="cf-address">Address</label>
+                                <textarea id="cf-address" class="form-control" rows="2" @bind="customer.Address" placeholder="House, road, block" maxlength="200"></textarea>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="pf-label" for="cf-city">Area / city</label>
+                                <input id="cf-city" class="form-control" list="cf-cities" @bind="customer.City" placeholder="Mirpur 10, Dhaka" maxlength="60" />
+                                <datalist id="cf-cities">
+                                    @foreach (var city in cities)
+                                    {
+                                        <option value="@city"></option>
+                                    }
+                                </datalist>
+                            </div>
+                        </div>
+                    </section>
+
+                    @* ---------- Note ---------- *@
+                    <section class="pf-card">
+                        <h2 class="pf-title"><i class="bi bi-journal-text"></i> Note</h2>
+                        <textarea class="form-control" rows="3" @bind="customer.Note" @bind:event="oninput"
+                                  placeholder="Jemon: Shirt er size L, shudhu cash e kene, bKash number..." maxlength="500"></textarea>
+                        <div class="pf-hint text-end mt-1">@(customer.Note?.Length ?? 0)/500</div>
+                    </section>
+                </div>
+
+                @* ---------- Live preview ---------- *@
+                <div class="col-lg-4">
+                    <div class="cf-side">
+                        <section class="pf-card text-center">
+                            <div class="cf-avatar mx-auto mb-2" style="background:@AvatarColor">@Initials</div>
+                            <div class="fw-semibold fs-5 text-break">@(string.IsNullOrWhiteSpace(customer.Name) ? "Customer name" : customer.Name.Trim())</div>
+                            <div class="text-muted">@(PhoneOk ? PhoneHelper.Pretty(NormalizedPhone) : "01XXX-XXXXXX")</div>
+                            <span class="badge mt-2 @TypeBadge(customer.CustomerType)">@customer.CustomerType</span>
+
+                            @if (!string.IsNullOrWhiteSpace(customer.Email) || !string.IsNullOrWhiteSpace(customer.City))
+                            {
+                                <hr />
+                                <div class="small text-muted text-start">
+                                    @if (!string.IsNullOrWhiteSpace(customer.Email))
+                                    {
+                                        <div class="text-truncate"><i class="bi bi-envelope me-2"></i>@customer.Email</div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(customer.City))
+                                    {
+                                        <div class="text-truncate"><i class="bi bi-geo-alt me-2"></i>@customer.City</div>
+                                    }
+                                </div>
+                            }
+                        </section>
+
+                        <section class="pf-card">
+                            <div class="pf-label mb-2">Required</div>
+                            <ul class="cf-checklist">
+                                <li class="@(NameOk ? "done" : "")"><i class="bi @(NameOk ? "bi-check-circle-fill" : "bi-circle")"></i> Full name</li>
+                                <li class="@(PhoneOk && duplicate == null ? "done" : "")"><i class="bi @(PhoneOk && duplicate == null ? "bi-check-circle-fill" : "bi-circle")"></i> Valid mobile number</li>
+                            </ul>
+                            <div class="pf-hint">Baki shob optional. Pore "Edit" diye jog kora jabe.</div>
+                        </section>
+
+                        @if (IsEdit && details != null)
+                        {
+                            <section class="pf-card">
+                                <div class="d-flex justify-content-between small mb-1"><span class="text-muted">Mot kena</span><strong>@Fmt.Money(details.Customer.TotalPurchase)</strong></div>
+                                <div class="d-flex justify-content-between small mb-1"><span class="text-muted">Baki</span><strong class="@(details.Customer.TotalDue > 0 ? "text-danger" : "")">@Fmt.Money(details.Customer.TotalDue)</strong></div>
+                                <div class="d-flex justify-content-between small"><span class="text-muted">Customer since</span><span>@Fmt.Date(details.Customer.CreatedAt)</span></div>
+                            </section>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex flex-wrap justify-content-end gap-2 mt-1">
+                <a class="btn btn-light border" href="@CancelUrl">Cancel</a>
+                @if (!IsEdit)
+                {
+                    <button type="button" class="btn btn-outline-secondary bg-white text-dark" disabled="@saving" @onclick="() => SaveAsync(true)">Save &amp; add another</button>
+                }
+                <button type="submit" class="btn btn-primary px-3" disabled="@saving">
+                    <i class="bi bi-check2 me-1"></i>@(saving ? "Saving..." : IsEdit ? "Update customer" : "Save customer")
+                </button>
+            </div>
+        </form>
+    }
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private record TypeCard(string Value, string Icon, string Description);
+
+    private static readonly TypeCard[] TypeCards =
+    {
+        new(CustomerTypes.Regular, "bi-person", "Shadharon customer"),
+        new(CustomerTypes.Vip, "bi-star", "Niyomito / beshi kena"),
+        new(CustomerTypes.Wholesale, "bi-box-seam", "Paikari kreta")
+    };
+
+    private static readonly string[] AvatarColors = { "#1f63b0", "#5c9a2a", "#a4262c", "#7b1fa2", "#f57c00", "#00838f", "#5d4037" };
+
+    private Customer? customer;
+    private CustomerDetails? details;
+    private List<Customer> others = new();
+    private List<string> cities = new();
+    private ElementReference nameInput;
+    private bool focusName;
+
+    private string? error;
+    private string? savedMessage;
+    private int savedId;
+    private bool saving;
+    private bool submitted;
+    private readonly HashSet<string> touched = new();
+
+    private bool IsEdit => Id.HasValue;
+    private string CancelUrl => IsEdit ? $"customers/{Id}" : "customers";
+
+    private string? NormalizedPhone => PhoneHelper.Normalize(customer!.Phone);
+    private bool PhoneOk => NormalizedPhone != null;
+    private bool NameOk => !string.IsNullOrWhiteSpace(customer!.Name);
+
+    // Same number e onno customer thakle
+    private Customer? duplicate => PhoneOk ? others.FirstOrDefault(o => o.Phone == NormalizedPhone) : null;
+
+    private int? Age
+    {
+        get
+        {
+            if (customer!.DateOfBirth is not DateTime dob || dob > DateTime.Today) return null;
+            var age = DateTime.Today.Year - dob.Year;
+            if (dob.Date > DateTime.Today.AddYears(-age)) age--;
+            return age;
+        }
+    }
+
+    private string Initials
+    {
+        get
+        {
+            var parts = (customer!.Name ?? string.Empty)
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Where(p => !p.EndsWith('.'))   // "Md." bad
+                .ToList();
+            if (parts.Count == 0) return "?";
+            var first = char.ToUpperInvariant(parts[0][0]);
+            return parts.Count > 1 ? $"{first}{char.ToUpperInvariant(parts[^1][0])}" : first.ToString();
+        }
+    }
+
+    private string AvatarColor => AvatarColors[Math.Abs((customer!.Name ?? string.Empty).Trim().ToUpperInvariant().Sum(ch => ch)) % AvatarColors.Length];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        error = null;
+        try
+        {
+            // Duplicate phone check ar area suggestion er jonno
+            var all = await CustomerService.GetAllAsync();
+            others = all.Where(c => c.Id != Id).ToList();
+            cities = all.Select(c => c.City).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(c => c).ToList();
+
+            if (IsEdit)
+            {
+                details = await CustomerService.GetByIdAsync(Id!.Value);
+                var c = details!.Customer;
+                customer = new Customer
+                {
+                    Id = c.Id, Name = c.Name, Phone = c.Phone, AltPhone = c.AltPhone, Email = c.Email,
+                    Gender = c.Gender, DateOfBirth = c.DateOfBirth, CustomerType = c.CustomerType,
+                    Address = c.Address, City = c.City, Note = c.Note
+                };
+            }
+            else
+            {
+                customer = new Customer();
+            }
+
+            ResetValidation();
+            focusName = true;
+        }
+        catch (Exception ex)
+        {
+            error = "Data load kora jay nai: " + ex.Message;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!focusName || customer == null) return;
+        focusName = false;
+        try { await nameInput.FocusAsync(); } catch (InvalidOperationException) { }
+    }
+
+    private void ToggleGender(string g) => customer!.Gender = customer.Gender == g ? null : g;
+
+    // ---------- Validation ----------
+
+    private void ResetValidation()
+    {
+        submitted = false;
+        touched.Clear();
+    }
+
+    private void Touch(string key) => touched.Add(key);
+
+    private bool Show(string key) => (submitted || touched.Contains(key)) && Errors.ContainsKey(key);
+
+    private void OnPhoneBlur()
+    {
+        Touch(nameof(Customer.Phone));
+        // "+880 1711-000000" -> "01711000000"
+        if (NormalizedPhone is string phone) customer!.Phone = phone;
+    }
+
+    private void OnAltPhoneBlur()
+    {
+        Touch(nameof(Customer.AltPhone));
+        if (PhoneHelper.Normalize(customer!.AltPhone) is string phone) customer.AltPhone = phone;
+    }
+
+    private Dictionary<string, string> Errors
+    {
+        get
+        {
+            var c = customer!;
+            var list = new Dictionary<string, string>();
+
+            if (!NameOk) list["Name"] = "Customer er naam dite hobe.";
+
+            if (string.IsNullOrWhiteSpace(c.Phone)) list["Phone"] = "Mobile number dite hobe.";
+            else if (!PhoneOk) list["Phone"] = "Number thik nai. 11 digit, 01 diye shuru (01XXXXXXXXX).";
+
+            if (duplicate != null) list["Phone"] = "Ei number e onno customer ache.";
+
+            if (!string.IsNullOrWhiteSpace(c.AltPhone))
+            {
+                var alt = PhoneHelper.Normalize(c.AltPhone);
+                if (alt == null) list["AltPhone"] = "Number thik nai.";
+                else if (alt == NormalizedPhone) list["AltPhone"] = "Main number er moto same.";
+            }
+
+            if (!string.IsNullOrWhiteSpace(c.Email) && !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(c.Email.Trim()))
+                list["Email"] = "Email thik nai (jemon name@example.com).";
+
+            if (c.DateOfBirth > DateTime.Today) list["DateOfBirth"] = "Vobisshoter tarikh deya jabe na.";
+
+            return list;
+        }
+    }
+
+    private string Cls(string key) => Show(key) ? "is-invalid" : string.Empty;
+
+    private string PhoneCls => Show("Phone") || duplicate != null ? "is-invalid" : PhoneOk ? "is-valid" : string.Empty;
+
+    private RenderFragment? Err(string key) =>
+        Show(key) ? @<div class="invalid-feedback">@Errors[key]</div> : null;
+
+    private static string TypeBadge(string type) => type switch
+    {
+        CustomerTypes.Vip => "bg-warning text-dark",
+        CustomerTypes.Wholesale => "bg-info text-dark",
+        _ => "bg-secondary"
+    };
+
+    // ---------- Save ----------
+
+    private async Task SaveAsync(bool addAnother)
+    {
+        if (saving) return;
+
+        error = null;
+        savedMessage = null;
+        submitted = true;
+        if (Errors.Count > 0)
+        {
+            error = "Lal chinhito ghor gulo thik korun.";
+            return;
+        }
+
+        var c = customer!;
+        c.Phone = NormalizedPhone!;
+        c.AltPhone = string.IsNullOrWhiteSpace(c.AltPhone) ? null : PhoneHelper.Normalize(c.AltPhone);
+        c.Email = string.IsNullOrWhiteSpace(c.Email) ? null : c.Email.Trim();
+
+        saving = true;
+        try
+        {
+            if (IsEdit)
+            {
+                await CustomerService.UpdateAsync(c);
+                Nav.NavigateTo($"customers/{c.Id}");
+                return;
+            }
+
+            var created = await CustomerService.CreateAsync(c);
+            if (!addAnother)
+            {
+                Nav.NavigateTo($"customers/{created.Id}");
+                return;
+            }
+
+            // Form khali kore porer customer er jonno ready
+            others.Add(created);
+            if (created.City != null && !cities.Contains(created.City, StringComparer.OrdinalIgnoreCase)) cities.Add(created.City);
+            savedId = created.Id;
+            savedMessage = $"'{created.Name}' save hoyeche. Porer customer likhun.";
+            customer = new Customer { CustomerType = c.CustomerType };
+            ResetValidation();
+            focusName = true;
+        }
+        catch (Exception ex)
+        {
+            error = "Save kora jay nai: " + ex.Message;
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

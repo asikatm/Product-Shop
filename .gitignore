@@ -13,4 +13,4 @@ obj/
 .vscode/
 
 # Product images
-ProductShop.Api/uploads/
+Api/ProductShop.Api/uploads/
