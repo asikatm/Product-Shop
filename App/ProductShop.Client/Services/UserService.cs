@@ -28,4 +28,10 @@ public class UserService
         var response = await _http.PutAsJsonAsync($"api/users/{user.Id}", user);
         await response.EnsureOkAsync();
     }
+
+    public async Task DeleteAsync(int id)
+    {
+        var response = await _http.DeleteAsync($"api/users/{id}");
+        await response.EnsureOkAsync();
+    }
 }

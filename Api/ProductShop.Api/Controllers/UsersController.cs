@@ -26,8 +26,28 @@ public class UsersController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<UserInfo>>> GetAll()
     {
-        var users = await _db.Users.OrderBy(u => u.Username).ToListAsync();
+        // Approve er opekkhay thaka user age
+        var users = await _db.Users
+            .OrderBy(u => u.IsActive || u.LastLoginAt != null)
+            .ThenBy(u => u.Username)
+            .ToListAsync();
         return users.Select(u => u.ToInfo()).ToList();
+    }
+
+    // DELETE: api/users/5
+    // Shudhu je kokhono login kore nai (jemon register request reject)
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var user = await _db.Users.FindAsync(id);
+        if (user == null) return NotFound();
+        if (id == User.UserId()) return BadRequest("Nijeke delete kora jabe na.");
+        if (user.LastLoginAt != null)
+            return BadRequest($"'{user.Username}' age login koreche, tai delete na kore inactive korun.");
+
+        _db.Users.Remove(user);
+        await _db.SaveChangesAsync();
+        return NoContent();
     }
 
     // POST: api/users
@@ -43,6 +63,8 @@ public class UsersController : ControllerBase
         {
             Username = request.Username.Trim(),
             FullName = request.FullName.Trim(),
+            Email = request.Email,
+            Phone = request.Phone,
             Role = request.Role,
             IsActive = request.IsActive
         };
@@ -71,6 +93,8 @@ public class UsersController : ControllerBase
 
         user.Username = request.Username.Trim();
         user.FullName = request.FullName.Trim();
+        user.Email = request.Email;
+        user.Phone = request.Phone;
         user.Role = request.Role;
         user.IsActive = request.IsActive;
         if (!string.IsNullOrWhiteSpace(request.Password))
@@ -88,6 +112,15 @@ public class UsersController : ControllerBase
         var username = request.Username.Trim();
         if (await _db.Users.AnyAsync(u => u.Username == username && u.Id != id))
             return $"'{username}' username already ache.";
+
+        request.Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(request.Phone))
+            request.Phone = null;
+        else
+        {
+            request.Phone = PhoneHelper.Normalize(request.Phone);
+            if (request.Phone == null) return "Mobile number thik nai. 01XXXXXXXXX (11 digit) hote hobe.";
+        }
 
         return null;
     }

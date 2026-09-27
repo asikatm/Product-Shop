@@ -1,0 +1,191 @@
+@page "/register"
+@layout EmptyLayout
+@inject AuthState Auth
+@inject AuthService AuthService
+@inject NavigationManager Nav
+@inject IConfiguration Config
+
+<PageTitle>Create account</PageTitle>
+
+<div class="login-shell">
+    <div class="login-hero">
+        <div class="d-flex align-items-center gap-2">
+            <span class="app-brand-logo"><i class="bi bi-bag-heart"></i></span>
+            <span class="fw-bold">@ShopName</span>
+        </div>
+
+        <div>
+            <h2 class="mb-4">Team e join korun.</h2>
+            <div class="login-feature"><i class="bi bi-1-circle"></i><span>Nicher form ta puron kore request pathan</span></div>
+            <div class="login-feature"><i class="bi bi-2-circle"></i><span>Admin apnar account approve korbe</span></div>
+            <div class="login-feature"><i class="bi bi-3-circle"></i><span>Tarpor username / password diye login korun</span></div>
+        </div>
+
+        <div class="small text-secondary">© @DateTime.Today.Year @ShopName</div>
+    </div>
+
+    <div class="login-form">
+        <div class="login-card" style="max-width:440px">
+            @if (done)
+            {
+                <div class="text-center">
+                    <div class="stat-icon tone-success mx-auto mb-3" style="width:64px;height:64px;font-size:1.8rem;border-radius:50%">
+                        <i class="bi bi-check2"></i>
+                    </div>
+                    <h1 class="h4 mb-2">Request pathano hoyeche!</h1>
+                    <p class="text-muted mb-4">
+                        <strong>@request.Username</strong> account ta ekhon approve er opekkhay. Admin approve korle login korte parben.
+                    </p>
+                    <a class="btn btn-primary btn-lg w-100" href="login"><i class="bi bi-arrow-left me-2"></i>Login page e jan</a>
+                </div>
+            }
+            else
+            {
+                <div class="d-lg-none d-flex align-items-center gap-2 mb-4">
+                    <span class="app-brand-logo text-white"><i class="bi bi-bag-heart"></i></span>
+                    <span class="fw-bold">@ShopName</span>
+                </div>
+
+                <h1 class="h3 mb-1">Create account</h1>
+                <p class="text-muted mb-4">Salesman hisebe account request korun.</p>
+
+                @if (!string.IsNullOrEmpty(error))
+                {
+                    <div class="alert alert-danger d-flex gap-2"><i class="bi bi-exclamation-circle-fill"></i><span>@error</span></div>
+                }
+
+                <EditForm Model="request" OnValidSubmit="RegisterAsync">
+                    <DataAnnotationsValidator />
+
+                    <div class="mb-3">
+                        <label class="form-label">Full name <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-person-vcard"></i></span>
+                            <InputText class="form-control" @bind-Value="request.FullName" placeholder="Md. Rahim Uddin" autocomplete="name" />
+                        </div>
+                        <ValidationMessage For="() => request.FullName" />
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label class="form-label">Username <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-at"></i></span>
+                                <InputText class="form-control" @bind-Value="request.Username" placeholder="rahim" autocomplete="username" />
+                            </div>
+                            <ValidationMessage For="() => request.Username" />
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label">Mobile <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-phone"></i></span>
+                                <InputText type="tel" class="form-control" @bind-Value="request.Phone" placeholder="01XXXXXXXXX" autocomplete="tel" />
+                            </div>
+                            <ValidationMessage For="() => request.Phone" />
+                            @if (phoneError != null)
+                            {
+                                <div class="validation-message">@phoneError</div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Email <span class="text-muted fw-normal">(optional)</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                            <InputText type="email" class="form-control" @bind-Value="request.Email" placeholder="name@example.com" autocomplete="email" />
+                        </div>
+                        <ValidationMessage For="() => request.Email" />
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-sm-6">
+                            <label class="form-label">Password <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                <InputText type="@(showPassword ? "text" : "password")" class="form-control" @bind-Value="request.Password" autocomplete="new-password" />
+                            </div>
+                            <ValidationMessage For="() => request.Password" />
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label">Confirm password <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <InputText type="@(showPassword ? "text" : "password")" class="form-control" @bind-Value="request.ConfirmPassword" autocomplete="new-password" />
+                                <button type="button" class="btn btn-outline-secondary" title="@(showPassword ? "Lukan" : "Dekhun")" @onclick="() => showPassword = !showPassword">
+                                    <i class="bi @(showPassword ? "bi-eye-slash" : "bi-eye")"></i>
+                                </button>
+                            </div>
+                            <ValidationMessage For="() => request.ConfirmPassword" />
+                        </div>
+                        <div class="col-12 pf-hint mt-1">Kompokkhe 6 okkhor.</div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-lg w-100" disabled="@busy">
+                        @if (busy)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span><span>Please wait...</span>
+                        }
+                        else
+                        {
+                            <span>Request pathan</span><i class="bi bi-send ms-2"></i>
+                        }
+                    </button>
+                </EditForm>
+
+                <p class="text-center text-muted mt-4 mb-0">
+                    Already account ache? <a href="login" class="fw-semibold">Login korun</a>
+                </p>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private RegisterRequest request = new();
+    private string? error;
+    private string? phoneError;
+    private bool busy;
+    private bool done;
+    private bool showPassword;
+
+    private string ShopName => Config["Shop:Name"] ?? "Garments Showroom";
+
+    protected override void OnInitialized()
+    {
+        if (Auth.IsLoggedIn) Nav.NavigateTo("");
+    }
+
+    private async Task RegisterAsync()
+    {
+        error = null;
+        phoneError = null;
+
+        var phone = PhoneHelper.Normalize(request.Phone);
+        if (phone == null)
+        {
+            phoneError = "Number thik nai. 11 digit, 01 diye shuru.";
+            return;
+        }
+        request.Phone = phone;
+        if (string.IsNullOrWhiteSpace(request.Email)) request.Email = null;
+
+        busy = true;
+        try
+        {
+            await AuthService.RegisterAsync(request);
+            done = true;
+        }
+        catch (HttpRequestException)
+        {
+            error = "API er sathe connect kora jay nai. API cholche kina check korun.";
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

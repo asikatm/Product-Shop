@@ -53,6 +53,13 @@ public class AuthService
         _state.Set(login);
     }
 
+    // Account request pathay; admin approve korle login kora jabe
+    public async Task RegisterAsync(RegisterRequest request)
+    {
+        var response = await _http.PostAsJsonAsync("api/auth/register", request);
+        await response.EnsureOkAsync();
+    }
+
     public async Task LogoutAsync()
     {
         _state.Clear();

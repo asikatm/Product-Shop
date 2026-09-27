@@ -159,6 +159,8 @@ public class AppDbContext : DbContext
             e.Property(u => u.Username).HasMaxLength(50).IsRequired();
             e.Property(u => u.FullName).HasMaxLength(100).IsRequired();
             e.Property(u => u.Role).HasMaxLength(20).IsRequired();
+            e.Property(u => u.Email).HasMaxLength(100);
+            e.Property(u => u.Phone).HasMaxLength(20);
             e.HasIndex(u => u.Username).IsUnique();
         });
     }

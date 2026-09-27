@@ -1,115 +1,164 @@
 @page "/users"
 @attribute [AdminOnly]
 @inject UserService UserService
+@inject AuthState Auth
+@inject IJSRuntime JS
 
 <PageTitle>Users</PageTitle>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0">Users</h1>
-    <button class="btn btn-primary" @onclick="StartAdd">+ Add User</button>
+<div class="page-head">
+    <div>
+        <h1 class="h3">Users</h1>
+        <div class="page-sub">Ke ke app use korbe ar ki korte parbe (role).</div>
+    </div>
+    <button class="btn btn-primary" @onclick="StartAdd"><i class="bi bi-person-plus me-1"></i> Add user</button>
 </div>
 
 @if (!string.IsNullOrEmpty(error))
 {
-    <div class="alert alert-danger">@error</div>
+    <div class="alert alert-danger d-flex gap-2"><i class="bi bi-exclamation-triangle-fill"></i><span>@error</span></div>
 }
-
-@if (form != null)
+@if (!string.IsNullOrEmpty(message))
 {
-    <div class="card mb-3">
-        <div class="card-header">@(form.Id == 0 ? "Notun User" : "Edit User")</div>
-        <div class="card-body">
-            <EditForm Model="form" OnValidSubmit="SaveAsync">
-                <DataAnnotationsValidator />
-
-                <div class="row g-3">
-                    <div class="col-md-3">
-                        <label class="form-label">Username</label>
-                        <InputText class="form-control" @bind-Value="form.Username" />
-                        <ValidationMessage For="() => form.Username" />
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Full Name</label>
-                        <InputText class="form-control" @bind-Value="form.FullName" />
-                        <ValidationMessage For="() => form.FullName" />
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Role</label>
-                        <InputSelect class="form-select" @bind-Value="form.Role">
-                            @foreach (var role in Roles.All)
-                            {
-                                <option value="@role">@role</option>
-                            }
-                        </InputSelect>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Password</label>
-                        <InputText type="password" class="form-control" @bind-Value="form.Password" />
-                        @if (form.Id != 0)
-                        {
-                            <div class="form-text">Khali rakhle password change hobe na.</div>
-                        }
-                        <ValidationMessage For="() => form.Password" />
-                    </div>
-                    <div class="col-md-1 d-flex align-items-center">
-                        <div class="form-check mt-4">
-                            <InputCheckbox class="form-check-input" id="active" @bind-Value="form.IsActive" />
-                            <label class="form-check-label" for="active">Active</label>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mt-3">
-                    <button type="submit" class="btn btn-success" disabled="@saving">@(saving ? "Saving..." : "Save")</button>
-                    <button type="button" class="btn btn-secondary" @onclick="() => form = null">Cancel</button>
-                </div>
-            </EditForm>
-        </div>
-    </div>
+    <div class="alert alert-success d-flex gap-2"><i class="bi bi-check-circle-fill"></i><span>@message</span></div>
 }
-
-<div class="alert alert-light border small">
-    <strong>Admin</strong> shob kichu korte pare. <strong>Salesman</strong> shudhu sale, customer ar baki joma nite pare;
-    kena dam, profit, stock in ar settings dekhte pare na.
-</div>
 
 @if (users == null)
 {
-    <p>Loading...</p>
+    @if (string.IsNullOrEmpty(error))
+    {
+        <div class="loading">Loading...</div>
+    }
 }
 else
 {
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-people" Tone="primary" Label="Mot user" Value="@users.Count.ToString()">@users.Count(u => u.IsActive) jon active</StatCard></div>
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-shield-check" Tone="purple" Label="Admin" Value="@users.Count(u => u.Role == Roles.Admin).ToString()">Shob kichu korte pare</StatCard></div>
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-person-badge" Tone="info" Label="Salesman" Value="@users.Count(u => u.Role == Roles.Salesman).ToString()">Sale ar customer</StatCard></div>
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-hourglass-split" Tone="warning" Label="Approve baki" Value="@Pending.Count.ToString()" ValueClass="@(Pending.Count > 0 ? "text-warning" : "")">Register request</StatCard></div>
+    </div>
+
+    @* ---------- Register kora, approve er opekkhay ---------- *@
+    @if (Pending.Count > 0)
+    {
+        <div class="card mb-4 border-warning-subtle">
+            <div class="card-header d-flex align-items-center gap-2 bg-warning-subtle">
+                <i class="bi bi-hourglass-split text-warning-emphasis"></i>
+                <span>Approve er opekkhay (@Pending.Count)</span>
+            </div>
+            <ul class="list-group list-group-flush">
+                @foreach (var u in Pending)
+                {
+                    <li class="list-group-item d-flex flex-wrap align-items-center gap-3 py-3">
+                        <span class="app-avatar" style="background:@AvatarColor(u)">@Initials(u)</span>
+                        <div class="me-auto">
+                            <div class="fw-semibold">@u.FullName <span class="text-muted fw-normal">@@@u.Username</span></div>
+                            <div class="small text-muted">
+                                @if (u.Phone != null)
+                                {
+                                    <span class="me-3"><i class="bi bi-phone me-1"></i>@PhoneHelper.Pretty(u.Phone)</span>
+                                }
+                                @if (u.Email != null)
+                                {
+                                    <span class="me-3"><i class="bi bi-envelope me-1"></i>@u.Email</span>
+                                }
+                                <span><i class="bi bi-clock me-1"></i>@Ago(u.CreatedAt)</span>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-secondary text-danger" disabled="@busy" @onclick="() => RejectAsync(u)"><i class="bi bi-x-lg me-1"></i>Reject</button>
+                            <button class="btn btn-sm btn-outline-secondary" disabled="@busy" @onclick="() => StartEdit(u)"><i class="bi bi-pencil me-1"></i>Edit</button>
+                            <button class="btn btn-sm btn-primary" disabled="@busy" @onclick="() => ApproveAsync(u)"><i class="bi bi-check2 me-1"></i>Approve</button>
+                        </div>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+
+    @* ---------- Shob user ---------- *@
+    <div class="row g-2 mb-3 align-items-center">
+        <div class="col-md-5">
+            <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input class="form-control" placeholder="Naam, username, phone ba email..." @bind="search" @bind:event="oninput" />
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="d-flex gap-2">
+                @foreach (var f in Filters)
+                {
+                    <button class="pf-chip @(filter == f ? "active" : "")" @onclick="() => filter = f">@f</button>
+                }
+            </div>
+        </div>
+    </div>
+
     <div class="card">
         <div class="table-responsive">
-            <table class="table table-hover mb-0 align-middle">
-                <thead class="table-light">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
                     <tr>
-                        <th>Username</th>
-                        <th>Full Name</th>
+                        <th>User</th>
+                        <th>Contact</th>
                         <th>Role</th>
                         <th>Status</th>
+                        <th>Last login</th>
+                        <th>Joined</th>
                         <th class="text-end">Action</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var u in users)
+                    @if (!Filtered.Any())
+                    {
+                        <tr><td colspan="7" class="text-center text-muted py-4">Kono user pawa jay nai.</td></tr>
+                    }
+                    @foreach (var u in Filtered)
                     {
                         <tr>
-                            <td>@u.Username</td>
-                            <td>@u.FullName</td>
-                            <td><span class="badge @(u.Role == Roles.Admin ? "bg-primary" : "bg-secondary")">@u.Role</span></td>
                             <td>
-                                @if (u.IsActive)
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="app-avatar" style="background:@AvatarColor(u)">@Initials(u)</span>
+                                    <div>
+                                        <div class="fw-semibold">
+                                            @u.FullName
+                                            @if (u.Id == Auth.User?.Id)
+                                            {
+                                                <span class="badge bg-primary-subtle text-primary-emphasis ms-1">You</span>
+                                            }
+                                        </div>
+                                        <div class="small text-muted">@@@u.Username</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="small">
+                                <div>@(u.Phone != null ? PhoneHelper.Pretty(u.Phone) : "-")</div>
+                                <div class="text-muted text-truncate" style="max-width:200px">@u.Email</div>
+                            </td>
+                            <td>
+                                <span class="badge @(u.Role == Roles.Admin ? "bg-primary-subtle text-primary-emphasis" : "bg-info-subtle text-info-emphasis")">
+                                    <i class="bi @(u.Role == Roles.Admin ? "bi-shield-check" : "bi-person-badge") me-1"></i>@u.Role
+                                </span>
+                            </td>
+                            <td>
+                                @if (u.IsPending)
                                 {
-                                    <span class="badge bg-success">Active</span>
+                                    <span class="badge bg-warning-subtle text-warning-emphasis">Pending</span>
+                                }
+                                else if (u.IsActive)
+                                {
+                                    <span class="badge bg-success-subtle text-success-emphasis">Active</span>
                                 }
                                 else
                                 {
-                                    <span class="badge bg-danger">Inactive</span>
+                                    <span class="badge bg-danger-subtle text-danger-emphasis">Inactive</span>
                                 }
                             </td>
+                            <td class="small text-muted">@(u.LastLoginAt is DateTime d ? Ago(d) : "Kokhono na")</td>
+                            <td class="small text-muted">@Fmt.Date(u.CreatedAt)</td>
                             <td class="text-end">
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(u)">Edit</button>
+                                <button class="btn btn-sm btn-outline-secondary" title="Edit" @onclick="() => StartEdit(u)"><i class="bi bi-pencil"></i></button>
                             </td>
                         </tr>
                     }
@@ -117,13 +166,138 @@ else
             </table>
         </div>
     </div>
+
+    <div class="pf-hint mt-3">
+        <i class="bi bi-info-circle me-1"></i>
+        <strong>Admin</strong> shob kichu korte pare. <strong>Salesman</strong> shudhu sale, customer ar baki joma nite pare;
+        kena dam, profit, stock in ar settings dekhte pare na.
+    </div>
+}
+
+@* ---------- Add / edit modal ---------- *@
+@if (form != null)
+{
+    <div class="ui-modal-backdrop" @onclick="CloseForm"></div>
+    <div class="ui-modal" role="dialog" aria-modal="true">
+        <div class="ui-modal-head">
+            <h2 class="h5 mb-0">@(form.Id == 0 ? "Add user" : "Edit user")</h2>
+            <button class="btn btn-sm btn-link text-muted" title="Close" @onclick="CloseForm"><i class="bi bi-x-lg"></i></button>
+        </div>
+
+        <EditForm Model="form" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+            <div class="ui-modal-body">
+                @if (!string.IsNullOrEmpty(formError))
+                {
+                    <div class="alert alert-danger py-2 small">@formError</div>
+                }
+
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label">Full name <span class="text-danger">*</span></label>
+                        <InputText class="form-control" @bind-Value="form.FullName" />
+                        <ValidationMessage For="() => form.FullName" />
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label">Username <span class="text-danger">*</span></label>
+                        <InputText class="form-control" @bind-Value="form.Username" />
+                        <ValidationMessage For="() => form.Username" />
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label">Mobile</label>
+                        <InputText type="tel" class="form-control" @bind-Value="form.Phone" placeholder="01XXXXXXXXX" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Email</label>
+                        <InputText type="email" class="form-control" @bind-Value="form.Email" placeholder="name@example.com" />
+                        <ValidationMessage For="() => form.Email" />
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Role</label>
+                        <div class="row g-2">
+                            @foreach (var r in RoleCards)
+                            {
+                                <div class="col-6">
+                                    <button type="button" class="cf-type @(form.Role == r.Role ? "active" : "")" disabled="@IsSelf" @onclick="() => form.Role = r.Role">
+                                        <i class="bi @r.Icon"></i>
+                                        <span class="cf-type-name">@r.Role</span>
+                                        <span class="cf-type-desc">@r.Description</span>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">
+                            Password @if (form.Id == 0) { <span class="text-danger">*</span> }
+                        </label>
+                        <div class="input-group">
+                            <input type="@(showPassword ? "text" : "password")" class="form-control" @bind="password" @bind:event="oninput" autocomplete="new-password"
+                                   placeholder="@(form.Id == 0 ? "Kompokkhe 4 okkhor" : "Khali rakhle change hobe na")" />
+                            <button type="button" class="btn btn-outline-secondary" @onclick="() => showPassword = !showPassword"><i class="bi @(showPassword ? "bi-eye-slash" : "bi-eye")"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <InputCheckbox class="form-check-input" id="user-active" @bind-Value="form.IsActive" disabled="@IsSelf" />
+                            <label class="form-check-label" for="user-active">Active (login korte parbe)</label>
+                        </div>
+                        @if (IsSelf)
+                        {
+                            <div class="pf-hint mt-1">Nijer role / status change kora jay na.</div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="ui-modal-foot">
+                <button type="button" class="btn btn-light border" @onclick="CloseForm">Cancel</button>
+                <button type="submit" class="btn btn-primary px-3" disabled="@busy">
+                    <i class="bi bi-check2 me-1"></i>@(busy ? "Saving..." : form.Id == 0 ? "Create user" : "Save changes")
+                </button>
+            </div>
+        </EditForm>
+    </div>
 }
 
 @code {
+    private record RoleCard(string Role, string Icon, string Description);
+
+    private static readonly RoleCard[] RoleCards =
+    {
+        new(Roles.Salesman, "bi-person-badge", "Sale, customer, baki joma"),
+        new(Roles.Admin, "bi-shield-check", "Shob kichu, settings shoho")
+    };
+
+    private static readonly string[] Filters = { "All", "Active", "Inactive" };
+    private static readonly string[] AvatarColors = { "#4f46e5", "#16a34a", "#dc2626", "#7c3aed", "#d97706", "#0891b2", "#be185d" };
+
     private List<UserInfo>? users;
     private UserSaveRequest? form;
+    private string password = string.Empty;
+    private bool showPassword;
     private string? error;
-    private bool saving;
+    private string? formError;
+    private string? message;
+    private bool busy;
+    private string search = string.Empty;
+    private string filter = "All";
+
+    private List<UserInfo> Pending => users!.Where(u => u.IsPending).ToList();
+
+    private bool IsSelf => form != null && form.Id == Auth.User?.Id;
+
+    private IEnumerable<UserInfo> Filtered => users!
+        .Where(u => !u.IsPending)
+        .Where(u => filter == "All" || (filter == "Active") == u.IsActive)
+        .Where(u => string.IsNullOrWhiteSpace(search)
+                 || u.FullName.Contains(search, StringComparison.OrdinalIgnoreCase)
+                 || u.Username.Contains(search, StringComparison.OrdinalIgnoreCase)
+                 || (u.Phone?.Contains(search.Replace("-", "").Trim()) ?? false)
+                 || (u.Email?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -140,33 +314,136 @@ else
         }
     }
 
-    private void StartAdd() => form = new UserSaveRequest();
-
-    private void StartEdit(UserInfo u) => form = new UserSaveRequest
+    private static string Initials(UserInfo u)
     {
-        Id = u.Id,
-        Username = u.Username,
-        FullName = u.FullName,
-        Role = u.Role,
-        IsActive = u.IsActive
-    };
+        var parts = u.FullName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(p => !p.EndsWith('.')).ToList();
+        if (parts.Count == 0) return u.Username[..1].ToUpperInvariant();
+        return parts.Count == 1 ? parts[0][..1].ToUpperInvariant() : (parts[0][..1] + parts[^1][..1]).ToUpperInvariant();
+    }
+
+    private static string AvatarColor(UserInfo u) => AvatarColors[u.Username.Sum(c => c) % AvatarColors.Length];
+
+    // "5 min age", "3 din age"
+    private static string Ago(DateTime time)
+    {
+        var span = DateTime.Now - time;
+        if (span.TotalMinutes < 1) return "Ekhon";
+        if (span.TotalHours < 1) return $"{(int)span.TotalMinutes} min age";
+        if (span.TotalDays < 1) return $"{(int)span.TotalHours} ghonta age";
+        if (span.TotalDays < 30) return $"{(int)span.TotalDays} din age";
+        return Fmt.Date(time);
+    }
+
+    private void StartAdd()
+    {
+        form = new UserSaveRequest { Role = Roles.Salesman, IsActive = true };
+        password = string.Empty;
+        formError = null;
+    }
+
+    private void StartEdit(UserInfo u)
+    {
+        form = new UserSaveRequest
+        {
+            Id = u.Id,
+            Username = u.Username,
+            FullName = u.FullName,
+            Email = u.Email,
+            Phone = u.Phone,
+            Role = u.Role,
+            IsActive = u.IsActive
+        };
+        password = string.Empty;
+        formError = null;
+    }
+
+    private void CloseForm() => form = null;
 
     private async Task SaveAsync()
     {
-        saving = true;
-        error = null;
+        formError = null;
+        if (form!.Id == 0 && password.Trim().Length < 4)
+        {
+            formError = "Notun user er password kompokkhe 4 okkhor dite hobe.";
+            return;
+        }
+        if (password.Length > 0 && password.Trim().Length < 4)
+        {
+            formError = "Password kompokkhe 4 okkhor.";
+            return;
+        }
+        if (!string.IsNullOrWhiteSpace(form.Phone))
+        {
+            var phone = PhoneHelper.Normalize(form.Phone);
+            if (phone == null)
+            {
+                formError = "Mobile number thik nai. 01XXXXXXXXX (11 digit).";
+                return;
+            }
+            form.Phone = phone;
+        }
 
+        form.Password = password.Length > 0 ? password : null;
+        form.Email = string.IsNullOrWhiteSpace(form.Email) ? null : form.Email.Trim();
+        form.Phone = string.IsNullOrWhiteSpace(form.Phone) ? null : form.Phone;
+
+        busy = true;
         try
         {
-            if (string.IsNullOrWhiteSpace(form!.Password))
-                form.Password = null;
-
-            if (form.Id == 0)
+            var isNew = form.Id == 0;
+            if (isNew)
                 await UserService.CreateAsync(form);
             else
                 await UserService.UpdateAsync(form);
 
+            message = isNew ? $"'{form.Username}' user toiri hoyeche." : $"'{form.Username}' update hoyeche.";
+            error = null;
             form = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            formError = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task ApproveAsync(UserInfo u)
+    {
+        await RunAsync(async () =>
+        {
+            await UserService.UpdateAsync(new UserSaveRequest
+            {
+                Id = u.Id, Username = u.Username, FullName = u.FullName, Email = u.Email, Phone = u.Phone,
+                Role = u.Role, IsActive = true
+            });
+            message = $"'{u.FullName}' approve hoyeche. Ekhon login korte parbe.";
+        });
+    }
+
+    private async Task RejectAsync(UserInfo u)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", $"'{u.FullName}' er request reject (delete) korben?");
+        if (!ok) return;
+
+        await RunAsync(async () =>
+        {
+            await UserService.DeleteAsync(u.Id);
+            message = $"'{u.FullName}' er request reject kora hoyeche.";
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await action();
             await LoadAsync();
         }
         catch (Exception ex)
@@ -175,7 +452,7 @@ else
         }
         finally
         {
-            saving = false;
+            busy = false;
         }
     }
 }

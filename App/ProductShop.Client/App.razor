@@ -11,7 +11,7 @@ else
 {
     <Router AppAssembly="@typeof(App).Assembly">
         <Found Context="routeData">
-            @if (!Auth.IsLoggedIn && routeData.PageType != typeof(Login))
+            @if (!Auth.IsLoggedIn && routeData.PageType != typeof(Login) && routeData.PageType != typeof(Register))
             {
                 <RedirectToLogin />
             }
