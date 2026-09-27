@@ -11,3 +11,6 @@ obj/
 # Rider / VS Code
 .idea/
 .vscode/
+
+# Product images
+ProductShop.Api/uploads/

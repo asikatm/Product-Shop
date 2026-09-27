@@ -75,7 +75,13 @@ else
                         <tr>
                             <td class="text-nowrap">@p.Code</td>
                             <td>
-                                <div class="fw-semibold">@p.Name</div>
+                                <div class="fw-semibold">
+                                    @p.Name
+                                    @if (p.Status != ProductStatus.Active)
+                                    {
+                                        <span class="badge @(p.Status == ProductStatus.Draft ? "text-bg-warning" : "text-bg-secondary") ms-1">@p.Status</span>
+                                    }
+                                </div>
                                 <div class="small text-muted">@string.Join(" · ", new[] { p.Category?.Name, p.Brand?.Name }.Where(x => x != null))</div>
                             </td>
                             <td class="text-end text-nowrap">@PriceRange(p)</td>

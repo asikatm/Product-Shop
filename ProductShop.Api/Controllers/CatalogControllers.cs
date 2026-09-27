@@ -99,3 +99,25 @@ public class BrandsController : NamedItemControllerBase<Brand>
 
     protected override Task<bool> IsUsedAsync(int id) => Db.Products.AnyAsync(p => p.BrandId == id);
 }
+
+[ApiController]
+[Route("api/shops")]
+public class ShopsController : NamedItemControllerBase<Shop>
+{
+    public ShopsController(AppDbContext db) : base(db) { }
+
+    protected override DbSet<Shop> Items => Db.Shops;
+
+    protected override Task<bool> IsUsedAsync(int id) => Db.Products.AnyAsync(p => p.ShopId == id);
+}
+
+[ApiController]
+[Route("api/suppliers")]
+public class SuppliersController : NamedItemControllerBase<Supplier>
+{
+    public SuppliersController(AppDbContext db) : base(db) { }
+
+    protected override DbSet<Supplier> Items => Db.Suppliers;
+
+    protected override Task<bool> IsUsedAsync(int id) => Db.Products.AnyAsync(p => p.SupplierId == id);
+}

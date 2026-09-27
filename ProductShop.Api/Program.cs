@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using ProductShop.Api.Data;
@@ -83,6 +84,15 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Product er chobi "uploads" folder e thake, login chara dekha jabe
+var uploadsRoot = Path.Combine(app.Environment.ContentRootPath, "uploads");
+Directory.CreateDirectory(uploadsRoot);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(uploadsRoot),
+    RequestPath = "/uploads"
+});
 
 app.UseCors("BlazorClient");
 app.UseAuthentication();

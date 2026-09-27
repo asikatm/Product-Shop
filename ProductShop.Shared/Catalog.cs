@@ -26,3 +26,22 @@ public class Brand : INamedItem
     [StringLength(50)]
     public string Name { get; set; } = string.Empty;
 }
+
+// Shop / outlet, jemon "Level 3, Shop 12"
+public class Shop : INamedItem
+{
+    public int Id { get; set; }
+
+    [Required(ErrorMessage = "Name is required")]
+    [StringLength(50)]
+    public string Name { get; set; } = string.Empty;
+}
+
+public class Supplier : INamedItem
+{
+    public int Id { get; set; }
+
+    [Required(ErrorMessage = "Name is required")]
+    [StringLength(50)]
+    public string Name { get; set; } = string.Empty;
+}

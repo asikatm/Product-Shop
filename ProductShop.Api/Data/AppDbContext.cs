@@ -9,8 +9,11 @@ public class AppDbContext : DbContext
 
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Brand> Brands => Set<Brand>();
+    public DbSet<Shop> Shops => Set<Shop>();
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductVariant> ProductVariants => Set<ProductVariant>();
+    public DbSet<ProductImage> ProductImages => Set<ProductImage>();
     public DbSet<StockEntry> StockEntries => Set<StockEntry>();
     public DbSet<StockEntryItem> StockEntryItems => Set<StockEntryItem>();
     public DbSet<Customer> Customers => Set<Customer>();
@@ -39,21 +42,53 @@ public class AppDbContext : DbContext
             e.HasIndex(b => b.Name).IsUnique();
         });
 
+        modelBuilder.Entity<Shop>(e =>
+        {
+            e.Property(s => s.Name).HasMaxLength(50).IsRequired();
+            e.HasIndex(s => s.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<Supplier>(e =>
+        {
+            e.Property(s => s.Name).HasMaxLength(50).IsRequired();
+            e.HasIndex(s => s.Name).IsUnique();
+        });
+
         modelBuilder.Entity<Product>(e =>
         {
             e.Property(p => p.Name).HasMaxLength(100).IsRequired();
             e.Property(p => p.Code).HasMaxLength(30);
+            e.Property(p => p.Barcode).HasMaxLength(40);
             e.Property(p => p.Description).HasMaxLength(500);
-            e.HasIndex(p => p.Code);
+            e.Property(p => p.Gender).HasMaxLength(20);
+            e.Property(p => p.Fabric).HasMaxLength(30);
+            e.Property(p => p.FitType).HasMaxLength(20);
+            e.Property(p => p.Sleeve).HasMaxLength(20);
+            e.Property(p => p.Season).HasMaxLength(30);
+            e.Property(p => p.Tags).HasMaxLength(200);
+            // Purono product gulo Active thakbe
+            e.Property(p => p.Status).HasMaxLength(20).IsRequired().HasDefaultValue(ProductStatus.Active);            e.HasIndex(p => p.Code);
 
-            // Je category / brand e product ache, take delete kora jabe na
+            // Je category / brand / shop / supplier e product ache, take delete kora jabe na
             e.HasOne(p => p.Category).WithMany().HasForeignKey(p => p.CategoryId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(p => p.Brand).WithMany().HasForeignKey(p => p.BrandId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(p => p.Shop).WithMany().HasForeignKey(p => p.ShopId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(p => p.Supplier).WithMany().HasForeignKey(p => p.SupplierId).OnDelete(DeleteBehavior.Restrict);
 
             e.HasMany(p => p.Variants)
              .WithOne()
              .HasForeignKey(v => v.ProductId)
              .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasMany(p => p.Images)
+             .WithOne()
+             .HasForeignKey(i => i.ProductId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ProductImage>(e =>
+        {
+            e.Property(i => i.Url).HasMaxLength(200).IsRequired();
         });
 
         modelBuilder.Entity<ProductVariant>(e =>

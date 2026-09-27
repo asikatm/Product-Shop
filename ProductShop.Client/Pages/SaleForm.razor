@@ -212,7 +212,8 @@ else
     {
         try
         {
-            products = (await ProductService.GetAllAsync()).Where(p => p.Variants.Count > 0).ToList();
+            // Draft / Inactive product bikri kora jabe na
+            products = (await ProductService.GetAllAsync()).Where(p => p.Variants.Count > 0 && p.Status == ProductStatus.Active).ToList();
             options = VariantOption.Build(products);
             customers = await CustomerService.GetAllAsync();
             AddLine();

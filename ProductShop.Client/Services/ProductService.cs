@@ -34,6 +34,23 @@ public class ProductService
         await response.EnsureOkAsync();
     }
 
+    // Chobi upload kore relative url ferot dey
+    public async Task<string> UploadImageAsync(Stream stream, string fileName, string contentType)
+    {
+        using var content = new MultipartFormDataContent();
+        var file = new StreamContent(stream);
+        file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+        content.Add(file, "file", fileName);
+
+        var response = await _http.PostAsync("api/products/images", content);
+        await response.EnsureOkAsync();
+        var image = await response.Content.ReadFromJsonAsync<ProductImage>();
+        return image!.Url;
+    }
+
+    // Chobir puro address (API server theke ashe)
+    public string ImageUrl(string url) => new Uri(_http.BaseAddress!, url).ToString();
+
     public async Task DeleteAsync(int id)
     {
         var response = await _http.DeleteAsync($"api/products/{id}");

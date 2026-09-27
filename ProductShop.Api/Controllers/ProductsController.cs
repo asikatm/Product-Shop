@@ -10,18 +10,27 @@ namespace ProductShop.Api.Controllers;
 [Route("api/[controller]")]
 public class ProductsController : ControllerBase
 {
-    private readonly AppDbContext _db;
+    private const string ImageFolder = "uploads/products/";
+    private const long MaxImageBytes = 2 * 1024 * 1024;
+    private static readonly string[] ImageExtensions = { ".jpg", ".jpeg", ".png" };
 
-    public ProductsController(AppDbContext db)
+    private readonly AppDbContext _db;
+    private readonly IWebHostEnvironment _env;
+
+    public ProductsController(AppDbContext db, IWebHostEnvironment env)
     {
         _db = db;
+        _env = env;
     }
 
     private IQueryable<Product> WithDetails => _db.Products
         .AsNoTracking()
         .Include(p => p.Category)
         .Include(p => p.Brand)
+        .Include(p => p.Shop)
+        .Include(p => p.Supplier)
         .Include(p => p.Variants.OrderBy(v => v.Id))
+        .Include(p => p.Images.OrderBy(i => i.SortOrder))
         .AsSplitQuery();
 
     // GET: api/products
@@ -47,8 +56,44 @@ public class ProductsController : ControllerBase
     private void HideCost(IEnumerable<Product> products)
     {
         if (User.IsInRole(Roles.Admin)) return;
-        foreach (var v in products.SelectMany(p => p.Variants))
-            v.PurchasePrice = 0;
+        foreach (var p in products)
+        {
+            p.PurchasePrice = 0;
+            foreach (var v in p.Variants)
+                v.PurchasePrice = 0;
+        }
+    }
+
+    // POST: api/products/images
+    // Chobi save kore relative url ferot dey, product save er shomoy url ta pathate hoy
+    [HttpPost("images")]
+    [Authorize(Roles = Roles.Admin)]
+    [RequestSizeLimit(MaxImageBytes + 64 * 1024)]
+    public async Task<ActionResult<ProductImage>> UploadImage(IFormFile file)
+    {
+        if (file == null || file.Length == 0) return BadRequest("Kono file nai.");
+        if (file.Length > MaxImageBytes) return BadRequest("Chobi 2MB er beshi hote parbe na.");
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (!ImageExtensions.Contains(ext)) return BadRequest("Shudhu JPG / PNG chobi deya jabe.");
+
+        var folder = Path.Combine(_env.ContentRootPath, ImageFolder);
+        Directory.CreateDirectory(folder);
+        var name = $"{Guid.NewGuid():N}{ext}";
+
+        await using (var stream = System.IO.File.Create(Path.Combine(folder, name)))
+            await file.CopyToAsync(stream);
+
+        return new ProductImage { Url = ImageFolder + name };
+    }
+
+    private void DeleteImageFiles(IEnumerable<string> urls)
+    {
+        foreach (var url in urls)
+        {
+            var path = Path.Combine(_env.ContentRootPath, ImageFolder, Path.GetFileName(url));
+            try { System.IO.File.Delete(path); } catch (IOException) { }
+        }
     }
 
     // POST: api/products
@@ -64,11 +109,18 @@ public class ProductsController : ControllerBase
         product.Id = 0;
         product.Category = null;
         product.Brand = null;
+        product.Shop = null;
+        product.Supplier = null;
         product.CreatedAt = DateTime.Now;
         foreach (var v in product.Variants)
         {
             v.Id = 0;
             v.ProductId = 0;
+        }
+        foreach (var i in product.Images)
+        {
+            i.Id = 0;
+            i.ProductId = 0;
         }
 
         // SKU banate variant er Id lage, tai duibar save
@@ -91,7 +143,11 @@ public class ProductsController : ControllerBase
     {
         if (id != product.Id) return BadRequest("Id mismatch");
 
-        var existing = await _db.Products.Include(p => p.Variants).FirstOrDefaultAsync(p => p.Id == id);
+        var existing = await _db.Products
+            .Include(p => p.Variants)
+            .Include(p => p.Images)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(p => p.Id == id);
         if (existing == null) return NotFound();
 
         Normalize(product);
@@ -114,9 +170,30 @@ public class ProductsController : ControllerBase
 
         existing.Name = product.Name;
         existing.Code = product.Code;
+        existing.Barcode = product.Barcode;
         existing.Description = product.Description;
         existing.CategoryId = product.CategoryId;
         existing.BrandId = product.BrandId;
+        existing.Gender = product.Gender;
+        existing.Fabric = product.Fabric;
+        existing.FitType = product.FitType;
+        existing.Sleeve = product.Sleeve;
+        existing.Season = product.Season;
+        existing.PurchasePrice = product.PurchasePrice;
+        existing.Price = product.Price;
+        existing.Discount = product.Discount;
+        existing.DiscountIsPercent = product.DiscountIsPercent;
+        existing.VatPercent = product.VatPercent;
+        existing.ShopId = product.ShopId;
+        existing.SupplierId = product.SupplierId;
+        existing.Status = product.Status;
+        existing.Tags = product.Tags;
+
+        // Chobi gulo notun list diye replace, bad pora file gulo muche fela hoy
+        var keepUrls = product.Images.Select(i => i.Url).ToHashSet();
+        var removedUrls = existing.Images.Select(i => i.Url).Where(u => !keepUrls.Contains(u)).ToList();
+        _db.ProductImages.RemoveRange(existing.Images);
+        existing.Images = product.Images.Select(i => new ProductImage { Url = i.Url, SortOrder = i.SortOrder }).ToList();
 
         _db.ProductVariants.RemoveRange(removed);
         foreach (var v in product.Variants)
@@ -142,6 +219,7 @@ public class ProductsController : ControllerBase
         await _db.SaveChangesAsync();
         await tx.CommitAsync();
 
+        DeleteImageFiles(removedUrls);
         return NoContent();
     }
 
@@ -150,7 +228,7 @@ public class ProductsController : ControllerBase
     [Authorize(Roles = Roles.Admin)]
     public async Task<IActionResult> Delete(int id)
     {
-        var product = await _db.Products.FindAsync(id);
+        var product = await _db.Products.Include(p => p.Images).FirstOrDefaultAsync(p => p.Id == id);
         if (product == null) return NotFound();
 
         var used = await _db.SaleItems.AnyAsync(i => i.ProductId == id)
@@ -158,17 +236,34 @@ public class ProductsController : ControllerBase
         if (used)
             return BadRequest($"'{product.Name}' er stock entry ba sale ache, tai delete kora jabe na.");
 
-        // Variant gulo cascade e delete hoye jay
+        // Variant ar chobi gulo cascade e delete hoye jay
+        var urls = product.Images.Select(i => i.Url).ToList();
         _db.Products.Remove(product);
         await _db.SaveChangesAsync();
+        DeleteImageFiles(urls);
         return NoContent();
     }
+
+    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static void Normalize(Product product)
     {
         product.Name = product.Name.Trim();
-        product.Code = string.IsNullOrWhiteSpace(product.Code) ? null : product.Code.Trim();
-        product.Description = string.IsNullOrWhiteSpace(product.Description) ? null : product.Description.Trim();
+        product.Code = Clean(product.Code);
+        product.Barcode = Clean(product.Barcode);
+        product.Description = Clean(product.Description);
+        product.Gender = Clean(product.Gender);
+        product.Fabric = Clean(product.Fabric);
+        product.FitType = Clean(product.FitType);
+        product.Sleeve = Clean(product.Sleeve);
+        product.Season = Clean(product.Season);
+        product.Tags = Clean(product.Tags);
+        product.Status = Clean(product.Status) ?? ProductStatus.Active;
+
+        product.Images = product.Images
+            .Where(i => !string.IsNullOrWhiteSpace(i.Url))
+            .Select((i, index) => new ProductImage { Id = i.Id, Url = i.Url.Trim(), SortOrder = index })
+            .ToList();
 
         foreach (var v in product.Variants)
         {
@@ -180,8 +275,17 @@ public class ProductsController : ControllerBase
 
     private async Task<string?> ValidateAsync(Product product, int id)
     {
-        if (product.Variants.Count == 0)
+        if (!ProductStatus.All.Contains(product.Status))
+            return "Status thik nai.";
+        // Draft e variant chara save kora jay
+        if (product.Variants.Count == 0 && product.Status != ProductStatus.Draft)
             return "Kompokkhe ekta size/color add korun.";
+        if (product.Discount < 0 || product.Price < 0 || product.PurchasePrice < 0)
+            return "Dam ba discount negative hote parbe na.";
+        if (product.DiscountIsPercent && product.Discount > 100)
+            return "Discount 100% er beshi hote parbe na.";
+        if (product.Images.Any(i => !i.Url.StartsWith(ImageFolder) || i.Url.Contains("..")))
+            return "Chobi thik nai.";
         if (product.Variants.Any(v => v.Size.Length == 0))
             return "Protiti row te size dite hobe.";
 
@@ -207,6 +311,10 @@ public class ProductsController : ControllerBase
             return "Category pawa jay nai.";
         if (product.BrandId.HasValue && !await _db.Brands.AnyAsync(b => b.Id == product.BrandId))
             return "Brand pawa jay nai.";
+        if (product.ShopId.HasValue && !await _db.Shops.AnyAsync(s => s.Id == product.ShopId))
+            return "Shop pawa jay nai.";
+        if (product.SupplierId.HasValue && !await _db.Suppliers.AnyAsync(s => s.Id == product.SupplierId))
+            return "Supplier pawa jay nai.";
 
         return null;
     }

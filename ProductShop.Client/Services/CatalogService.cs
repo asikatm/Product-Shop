@@ -8,6 +8,8 @@ public class CatalogService
 {
     public const string CategoriesUrl = "api/categories";
     public const string BrandsUrl = "api/brands";
+    public const string ShopsUrl = "api/shops";
+    public const string SuppliersUrl = "api/suppliers";
 
     private readonly HttpClient _http;
 
@@ -19,6 +21,10 @@ public class CatalogService
     public Task<List<Category>> GetCategoriesAsync() => GetAllAsync<Category>(CategoriesUrl);
 
     public Task<List<Brand>> GetBrandsAsync() => GetAllAsync<Brand>(BrandsUrl);
+
+    public Task<List<Shop>> GetShopsAsync() => GetAllAsync<Shop>(ShopsUrl);
+
+    public Task<List<Supplier>> GetSuppliersAsync() => GetAllAsync<Supplier>(SuppliersUrl);
 
     public async Task<List<T>> GetAllAsync<T>(string url)
     {

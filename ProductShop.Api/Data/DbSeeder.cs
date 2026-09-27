@@ -22,6 +22,9 @@ public static class DbSeeder
             db.Categories.AddRange(names.Select(n => new Category { Name = n }));
         }
 
+        if (!await db.Shops.AnyAsync())
+            db.Shops.Add(new Shop { Name = "Main shop" });
+
         await db.SaveChangesAsync();
     }
 }

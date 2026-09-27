@@ -1,0 +1,28 @@
+@* Fixed list theke ekta value select (khali = kichu na) *@
+<select class="form-select @CssClass" value="@(Value ?? string.Empty)" @onchange="OnChange">
+    <option value="">-- Select --</option>
+    @if (!string.IsNullOrEmpty(Value) && !Options.Contains(Value))
+    {
+        <option value="@Value">@Value</option>
+    }
+    @foreach (var o in Options)
+    {
+        <option value="@o">@o</option>
+    }
+</select>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    [Parameter, EditorRequired] public IReadOnlyList<string> Options { get; set; } = Array.Empty<string>();
+
+    [Parameter] public string? CssClass { get; set; }
+
+    private Task OnChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        return ValueChanged.InvokeAsync(string.IsNullOrEmpty(value) ? null : value);
+    }
+}
