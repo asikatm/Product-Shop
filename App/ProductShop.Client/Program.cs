@@ -10,8 +10,10 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 builder.Services.AddSingleton<AuthState>();
 
 // API er address wwwroot/appsettings.json theke ashe.
+// Khali thakle (online / publish kora hole) je site theke app khulche, sheta-i API.
 // AuthHandler protiti request e login token lagay.
-var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "http://localhost:5000/";
+var apiBaseUrl = builder.Configuration["ApiBaseUrl"];
+if (string.IsNullOrWhiteSpace(apiBaseUrl)) apiBaseUrl = builder.HostEnvironment.BaseAddress;
 builder.Services.AddScoped(sp => new HttpClient(new AuthHandler(sp.GetRequiredService<AuthState>()) { InnerHandler = new HttpClientHandler() })
 {
     BaseAddress = new Uri(apiBaseUrl)

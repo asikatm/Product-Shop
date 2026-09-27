@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductShop.Api.Data;
+using ProductShop.Api.Services;
 using ProductShop.Shared;
 
 namespace ProductShop.Api.Controllers;
@@ -15,12 +16,12 @@ public class ProductsController : ControllerBase
     private static readonly string[] ImageExtensions = { ".jpg", ".jpeg", ".png" };
 
     private readonly AppDbContext _db;
-    private readonly IWebHostEnvironment _env;
+    private readonly string _imageDir;
 
-    public ProductsController(AppDbContext db, IWebHostEnvironment env)
+    public ProductsController(AppDbContext db, IWebHostEnvironment env, IConfiguration config)
     {
         _db = db;
-        _env = env;
+        _imageDir = Path.Combine(UploadPaths.Root(config, env), "products");
     }
 
     private IQueryable<Product> WithDetails => _db.Products
@@ -77,11 +78,10 @@ public class ProductsController : ControllerBase
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (!ImageExtensions.Contains(ext)) return BadRequest("Shudhu JPG / PNG chobi deya jabe.");
 
-        var folder = Path.Combine(_env.ContentRootPath, ImageFolder);
-        Directory.CreateDirectory(folder);
+        Directory.CreateDirectory(_imageDir);
         var name = $"{Guid.NewGuid():N}{ext}";
 
-        await using (var stream = System.IO.File.Create(Path.Combine(folder, name)))
+        await using (var stream = System.IO.File.Create(Path.Combine(_imageDir, name)))
             await file.CopyToAsync(stream);
 
         return new ProductImage { Url = ImageFolder + name };
@@ -91,7 +91,7 @@ public class ProductsController : ControllerBase
     {
         foreach (var url in urls)
         {
-            var path = Path.Combine(_env.ContentRootPath, ImageFolder, Path.GetFileName(url));
+            var path = Path.Combine(_imageDir, Path.GetFileName(url));
             try { System.IO.File.Delete(path); } catch (IOException) { }
         }
     }

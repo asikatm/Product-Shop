@@ -8,6 +8,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.9" />
+    <!-- Publish korle App (Blazor) er file gulo API theke serve hoy, tai ek link e shob chole -->
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="9.0.9" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.9" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.9">
       <PrivateAssets>all</PrivateAssets>
@@ -18,6 +20,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ProductShop.Shared\ProductShop.Shared.csproj" />
+  </ItemGroup>
+
+  <!-- Shudhu Release / publish e App ke API er sathe bundle kora hoy.
+       Debug e (VS F5) Api ar App ager motoi alada alada chole. -->
+  <ItemGroup Condition="'$(Configuration)' == 'Release'">
+    <ProjectReference Include="..\..\App\ProductShop.Client\ProductShop.Client.csproj" />
   </ItemGroup>
 
 </Project>

@@ -14,3 +14,7 @@ obj/
 
 # Product images
 Api/ProductShop.Api/uploads/
+
+# Temporary online link (run-online.ps1)
+publish/
+tools/

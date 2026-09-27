@@ -86,7 +86,7 @@ if (app.Environment.IsDevelopment())
 }
 
 // Product er chobi "uploads" folder e thake, login chara dekha jabe
-var uploadsRoot = Path.Combine(app.Environment.ContentRootPath, "uploads");
+var uploadsRoot = UploadPaths.Root(app.Configuration, app.Environment);
 Directory.CreateDirectory(uploadsRoot);
 app.UseStaticFiles(new StaticFileOptions
 {
@@ -94,9 +94,16 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/uploads"
 });
 
+// App (Blazor) er file: online e API ar App ek link e chole
+app.UseBlazorFrameworkFiles();
+app.UseStaticFiles();
+
 app.UseCors("BlazorClient");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// API chara onno shob URL (jemon /login, /products) e App khulbe; login lage na
+app.MapFallbackToFile("index.html").AllowAnonymous();
 
 app.Run();
