@@ -25,5 +25,9 @@ builder.Services.AddScoped<StockService>();
 builder.Services.AddScoped<SaleService>();
 builder.Services.AddScoped<CustomerService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<RoleService>();
+builder.Services.AddScoped<StoreService>();
+builder.Services.AddScoped<CartService>();
+builder.Services.AddScoped<WebOrderService>();
 
 await builder.Build().RunAsync();

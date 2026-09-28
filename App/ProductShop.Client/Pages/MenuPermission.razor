@@ -1,0 +1,326 @@
+@page "/menu-permission"
+@attribute [RequirePermission(Perms.RolesView)]
+@inject RoleService RoleService
+@inject AuthState Auth
+@inject AuthService AuthService
+@inject NavigationManager Nav
+
+<PageTitle>Menu Permission</PageTitle>
+
+@* ---------- Rongin header ---------- *@
+<div class="hero hero-indigo mb-4">
+    <div class="hero-icon"><i class="bi bi-ui-checks-grid"></i></div>
+    <div class="me-auto">
+        <h1 class="h3 mb-1">Menu Permission</h1>
+        <div class="hero-sub">Kon role kon menu te ki korte parbe — tick diye thik korun</div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        @foreach (var a in PermAction.All)
+        {
+            <span class="hero-chip"><i class="bi @MenuStyle.ActionIcon(a) me-1"></i>@ActionTitle(a)</span>
+        }
+    </div>
+    <a class="btn btn-light ms-lg-3" href="roles"><i class="bi bi-person-badge me-1"></i>Roles</a>
+</div>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger d-flex gap-2"><i class="bi bi-exclamation-triangle-fill"></i><span>@error</span></div>
+}
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-success d-flex gap-2"><i class="bi bi-check-circle-fill"></i><span>@message</span></div>
+}
+
+@if (roles == null)
+{
+    <div class="loading">Loading...</div>
+}
+else
+{
+    <div class="row g-3">
+        @* ---------- Role list ---------- *@
+        <div class="col-lg-3">
+            <div class="card">
+                <div class="card-header d-flex align-items-center gap-2"><i class="bi bi-people-fill text-primary"></i> Role select korun</div>
+                <div class="p-2 d-grid gap-1">
+                    @foreach (var r in roles)
+                    {
+                        var tone = MenuStyle.RoleTone(r);
+                        <button class="role-item @(selected?.Id == r.Id ? $"active grad-{tone}" : "")" @onclick="() => SelectAsync(r)">
+                            <span class="role-avatar tone-@tone"><i class="bi @(r.IsSystem ? "bi-shield-fill-check" : "bi-person-badge-fill")"></i></span>
+                            <span class="me-auto text-start">
+                                <span class="d-block fw-semibold">@r.Name</span>
+                                <span class="role-sub">@(r.IsSystem ? "Shob access" : $"{r.Permissions.Count} ta permission")</span>
+                            </span>
+                            <span class="role-count" title="User">@r.UserCount <i class="bi bi-person"></i></span>
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* ---------- Permission matrix ---------- *@
+        <div class="col-lg-9">
+            @if (selected == null)
+            {
+                <div class="pf-card text-center text-muted py-5">Bam pash theke ekta role select korun.</div>
+            }
+            else
+            {
+                var roleTone = MenuStyle.RoleTone(selected);
+                <div class="card overflow-hidden">
+                    <div class="perm-head grad-@roleTone">
+                        <span class="role-avatar role-avatar-lg"><i class="bi @(selected.IsSystem ? "bi-shield-fill-check" : "bi-person-badge-fill")"></i></span>
+                        <div class="me-auto">
+                            <div class="fs-5 fw-bold">@selected.Name</div>
+                            <div class="perm-head-sub">
+                                @if (selected.IsSystem)
+                                {
+                                    <span>System role · shob menu, shob kaaj</span>
+                                }
+                                else
+                                {
+                                    <span>@granted.Count ta permission select kora</span>
+                                }
+                            </div>
+                        </div>
+                        @if (!selected.IsSystem)
+                        {
+                            <div class="d-flex flex-wrap gap-2">
+                                @foreach (var a in PermAction.All)
+                                {
+                                    <span class="count-chip" title="@ActionTitle(a)"><i class="bi @MenuStyle.ActionIcon(a) me-1"></i>@CountOf(a)</span>
+                                }
+                                <button class="btn btn-sm btn-light" disabled="@ReadOnly" @onclick="() => SetAll(true)"><i class="bi bi-check2-all me-1"></i>Select all</button>
+                                <button class="btn btn-sm btn-outline-light" disabled="@ReadOnly" @onclick="() => SetAll(false)"><i class="bi bi-x-lg me-1"></i>Clear</button>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0 perm-table">
+                            <thead>
+                                <tr>
+                                    <th>Menu</th>
+                                    @foreach (var a in PermAction.All)
+                                    {
+                                        <th class="text-center" style="width:100px">
+                                            <label class="d-inline-flex flex-column align-items-center gap-1 mb-0" style="cursor:pointer">
+                                                <span class="act-pill act-@MenuStyle.ActionTone(a)"><i class="bi @MenuStyle.ActionIcon(a) me-1"></i>@ActionTitle(a)</span>
+                                                <input type="checkbox" class="form-check-input m-0 perm-check perm-@MenuStyle.ActionTone(a)" checked="@ColumnAll(a)" disabled="@ReadOnly" @onchange="e => SetColumn(a, (bool)e.Value!)" />
+                                            </label>
+                                        </th>
+                                    }
+                                    <th class="text-center" style="width:80px">
+                                        <label class="d-inline-flex flex-column align-items-center gap-1 mb-0">
+                                            <span class="act-pill act-all"><i class="bi bi-check2-all me-1"></i>All</span>
+                                        </label>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var group in AppMenus.All.GroupBy(m => m.Group))
+                                {
+                                    <tr class="perm-group"><td colspan="6"><i class="bi @GroupIcon(group.Key) me-2"></i>@group.Key</td></tr>
+                                    @foreach (var m in group)
+                                    {
+                                        var tone = MenuStyle.Tone(m.Key);
+                                        <tr class="perm-row @(RowAny(m) ? "on" : "")" style="--row-color: var(--tone-@tone)">
+                                            <td>
+                                                <div class="d-flex align-items-center gap-3">
+                                                    <span class="stat-icon tone-@tone" style="width:38px;height:38px;font-size:1.05rem"><i class="bi @m.Icon"></i></span>
+                                                    <div>
+                                                        <div class="fw-semibold">@m.Title</div>
+                                                        <div class="small text-muted">@m.Description</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            @foreach (var a in PermAction.All)
+                                            {
+                                                <td class="text-center">
+                                                    @if (m.Actions.Contains(a))
+                                                    {
+                                                        <input type="checkbox" class="form-check-input perm-check perm-@MenuStyle.ActionTone(a)" checked="@Has(m.Key, a)" disabled="@ReadOnly"
+                                                               @onchange="e => Toggle(m.Key, a, (bool)e.Value!)" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="perm-na">—</span>
+                                                    }
+                                                </td>
+                                            }
+                                            <td class="text-center">
+                                                <input type="checkbox" class="form-check-input perm-check perm-all" checked="@RowAll(m)" disabled="@ReadOnly" @onchange="e => SetRow(m, (bool)e.Value!)" />
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                @if (!selected.IsSystem)
+                {
+                    <div class="pf-actions">
+                        <span class="pf-actions-note">
+                            @if (Dirty)
+                            {
+                                <span class="badge bg-warning-subtle text-warning-emphasis fs-6 fw-semibold"><i class="bi bi-exclamation-circle me-1"></i>Save kora hoy nai</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success-subtle text-success-emphasis fs-6 fw-semibold"><i class="bi bi-check2-circle me-1"></i>Sob save kora ache</span>
+                            }
+                        </span>
+                        @if (!Auth.Can(Perms.RolesEdit))
+                        {
+                            <span class="small text-muted">Apnar permission bodlanor access nai.</span>
+                        }
+                        <button class="btn btn-light border" disabled="@(!Dirty || busy)" @onclick="Reset"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset</button>
+                        <button class="btn btn-gradient px-4" disabled="@(!Dirty || busy || ReadOnly)" @onclick="SaveAsync">
+                            <i class="bi bi-check2 me-1"></i>@(busy ? "Saving..." : "Save permission")
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-info mt-3 d-flex gap-2"><i class="bi bi-info-circle-fill"></i>Admin (system) role er shob permission shob shomoy thake, bodlano jay na.</div>
+                }
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "role")] public int? RoleId { get; set; }
+
+    private List<RoleInfo>? roles;
+    private RoleInfo? selected;
+    private HashSet<string> granted = new();
+    private HashSet<string> saved = new();
+    private string? error;
+    private string? message;
+    private bool busy;
+
+    private bool ReadOnly => selected == null || selected.IsSystem || !Auth.Can(Perms.RolesEdit) || busy;
+    private bool Dirty => !granted.SetEquals(saved);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            roles = await RoleService.GetAllAsync();
+            var first = roles.FirstOrDefault(r => r.Id == RoleId) ?? roles.FirstOrDefault(r => !r.IsSystem) ?? roles.FirstOrDefault();
+            if (first != null) Select(first);
+        }
+        catch (Exception ex)
+        {
+            roles = new List<RoleInfo>();
+            error = "Data ana jay nai: " + ex.Message;
+        }
+    }
+
+    private static string ActionTitle(string action) => action switch
+    {
+        PermAction.View => "View",
+        PermAction.Add => "Add",
+        PermAction.Edit => "Edit",
+        _ => "Delete"
+    };
+
+    private Task SelectAsync(RoleInfo r)
+    {
+        message = null;
+        Select(r);
+        Nav.NavigateTo($"menu-permission?role={r.Id}", replace: true);
+        return Task.CompletedTask;
+    }
+
+    private void Select(RoleInfo r)
+    {
+        selected = r;
+        saved = r.Permissions.ToHashSet();
+        granted = saved.ToHashSet();
+    }
+
+    private bool Has(string menu, string action) => granted.Contains(PermAction.Key(menu, action));
+
+    // Add / edit / delete dile view o lage; view bad dile baki gulo o jay
+    private void Toggle(string menu, string action, bool on)
+    {
+        var key = PermAction.Key(menu, action);
+        if (on)
+        {
+            granted.Add(key);
+            granted.Add(PermAction.Key(menu, PermAction.View));
+        }
+        else
+        {
+            granted.Remove(key);
+            if (action == PermAction.View)
+                granted.RemoveWhere(p => p.StartsWith(menu + "."));
+        }
+        message = null;
+    }
+
+    private bool RowAll(AppMenu m) => m.Actions.All(a => Has(m.Key, a));
+
+    private bool RowAny(AppMenu m) => m.Actions.Any(a => Has(m.Key, a));
+
+    // Header e: koyta View / Add / Edit / Delete tick deya
+    private int CountOf(string action) => AppMenus.All.Count(m => m.Actions.Contains(action) && Has(m.Key, action));
+
+    private static string GroupIcon(string group) => group switch
+    {
+        "Main" => "bi-house-door",
+        "Inventory" => "bi-box-seam",
+        _ => "bi-gear"
+    };
+
+    private void SetRow(AppMenu m, bool on)
+    {
+        foreach (var a in m.Actions) Toggle(m.Key, a, on);
+    }
+
+    private bool ColumnAll(string action) =>
+        AppMenus.All.Where(m => m.Actions.Contains(action)).All(m => Has(m.Key, action));
+
+    private void SetColumn(string action, bool on)
+    {
+        foreach (var m in AppMenus.All.Where(m => m.Actions.Contains(action))) Toggle(m.Key, action, on);
+    }
+
+    private void SetAll(bool on)
+    {
+        granted = on ? AppMenus.AllKeys().ToHashSet() : new HashSet<string>();
+        message = null;
+    }
+
+    private void Reset() => granted = saved.ToHashSet();
+
+    private async Task SaveAsync()
+    {
+        busy = true;
+        error = null;
+        try
+        {
+            await RoleService.SetPermissionsAsync(selected!.Id, granted);
+            selected.Permissions = granted.ToList();
+            saved = granted.ToHashSet();
+            message = $"'{selected.Name}' er permission save hoyeche. Oi role er user ra page reload korlei notun menu pabe.";
+
+            // Nijer role hole nijer menu o update
+            await AuthService.RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

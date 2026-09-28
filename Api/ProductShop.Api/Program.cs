@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -16,6 +17,19 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<PermissionService>();
+builder.Services.AddScoped<SaleWriter>();
+
+// Website theke order: ek IP theke minute e 5 tar beshi na (spam atkate).
+// Cloudflare tunnel er pechone ashol IP "CF-Connecting-IP" header e thake.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("store-orders", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Request.Headers["CF-Connecting-IP"].FirstOrDefault() ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(1) }));
+});
 
 // Login token (JWT) diye API protect kora
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -38,7 +52,10 @@ builder.Services.AddAuthorization(options =>
 
 // Non-nullable string (jemon InvoiceNo) ke automatic "required" dhorbe na
 builder.Services.AddControllers(options =>
-    options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true);
+{
+    options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
+    options.Filters.Add<ActiveUserFilter>();
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -99,6 +116,7 @@ app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
 
 app.UseCors("BlazorClient");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

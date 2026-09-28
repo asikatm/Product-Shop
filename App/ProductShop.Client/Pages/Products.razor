@@ -1,4 +1,5 @@
-@page "/products"
+@page "/products"
+@attribute [RequirePermission(Perms.ProductsView)]
 @inject ProductService ProductService
 @inject CatalogService CatalogService
 @inject AuthState Auth
@@ -11,7 +12,7 @@
         <h1 class="h3">Products</h1>
         <div class="page-sub">@(products == null ? "" : $"{products.Count} ta product · {products.Sum(p => p.TotalStock)} pcs stock")</div>
     </div>
-    @if (Auth.IsAdmin)
+    @if (Auth.Can(Perms.ProductsAdd))
     {
         <a class="btn btn-primary" href="product/add"><i class="bi bi-plus-lg me-1"></i> Add Product</a>
     }
@@ -28,7 +29,7 @@
 }
 else if (products.Count == 0)
 {
-    <div class="alert alert-info">Kono product nai. @(Auth.IsAdmin ? "Notun product add korun." : "")</div>
+    <div class="alert alert-info">Kono product nai. @(Auth.Can(Perms.ProductsAdd) ? "Notun product add korun." : "")</div>
 }
 else
 {
@@ -69,7 +70,7 @@ else
                         <th class="text-end">Sale Price</th>
                         <th>Size / Color Stock</th>
                         <th class="text-end">Total</th>
-                        @if (Auth.IsAdmin)
+                        @if (Auth.Can(Perms.ProductsEdit, Perms.ProductsDelete))
                         {
                             <th class="text-end">Action</th>
                         }
@@ -104,7 +105,13 @@ else
                                 </div>
                             </td>
                             <td class="text-nowrap text-muted small">@p.Code</td>
-                            <td class="text-end text-nowrap">@PriceRange(p)</td>
+                            <td class="text-end text-nowrap">
+                                @PriceRange(p)
+                                @if (p.Discount > 0 && p.Variants.Count > 0)
+                                {
+                                    <div class="small text-muted text-decoration-line-through">@Fmt.Money(p.Variants.Max(v => v.Price))</div>
+                                }
+                            </td>
                             <td>
                                 <div class="d-flex flex-wrap gap-1">
                                     @foreach (var v in p.Variants)
@@ -114,11 +121,11 @@ else
                                 </div>
                             </td>
                             <td class="text-end fw-semibold">@p.TotalStock</td>
-                            @if (Auth.IsAdmin)
+                            @if (Auth.Can(Perms.ProductsEdit, Perms.ProductsDelete))
                             {
                                 <td class="text-end text-nowrap">
-                                    <a class="btn btn-sm btn-outline-secondary" href="product/edit/@p.Id" title="Edit"><i class="bi bi-pencil"></i></a>
-                                    <button class="btn btn-sm btn-outline-secondary text-danger" title="Delete" @onclick="() => DeleteAsync(p)"><i class="bi bi-trash"></i></button>
+                                    @if (Auth.Can(Perms.ProductsEdit)) { <a class="btn btn-sm btn-outline-secondary" href="product/edit/@p.Id" title="Edit"><i class="bi bi-pencil"></i></a> }
+                                    @if (Auth.Can(Perms.ProductsDelete)) { <button class="btn btn-sm btn-outline-secondary text-danger" title="Delete" @onclick="() => DeleteAsync(p)"><i class="bi bi-trash"></i></button> }
                                 </td>
                             }
                         </tr>
@@ -169,8 +176,9 @@ else
     private static string PriceRange(Product p)
     {
         if (p.Variants.Count == 0) return "-";
-        var min = p.Variants.Min(v => v.Price);
-        var max = p.Variants.Max(v => v.Price);
+        // Discount bad diye bikri dam
+        var min = p.Variants.Min(v => p.PriceAfterDiscount(v.Price));
+        var max = p.Variants.Max(v => p.PriceAfterDiscount(v.Price));
         return min == max ? Fmt.Money(min) : $"{Fmt.Money(min)} - {Fmt.Money(max)}";
     }
 

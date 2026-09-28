@@ -1,0 +1,22 @@
+@* Web order er obostha - icon + lekha (shudhu rong diye na) *@
+<span class="badge @Css"><i class="bi @Icon me-1"></i>@Status</span>
+
+@code {
+    [Parameter, EditorRequired] public string Status { get; set; } = string.Empty;
+
+    private string Css => Status switch
+    {
+        WebOrderStatus.Pending => "bg-warning-subtle text-warning-emphasis",
+        WebOrderStatus.Confirmed => "bg-primary-subtle text-primary-emphasis",
+        WebOrderStatus.Delivered => "bg-success-subtle text-success-emphasis",
+        _ => "bg-danger-subtle text-danger-emphasis"
+    };
+
+    private string Icon => Status switch
+    {
+        WebOrderStatus.Pending => "bi-hourglass-split",
+        WebOrderStatus.Confirmed => "bi-check2-circle",
+        WebOrderStatus.Delivered => "bi-truck",
+        _ => "bi-x-circle"
+    };
+}

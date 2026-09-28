@@ -1,20 +1,47 @@
 @page "/"
+@attribute [RequirePermission(Perms.DashboardView)]
+@implements IDisposable
 @inject SaleService SaleService
 @inject AuthState Auth
 
 <PageTitle>Dashboard</PageTitle>
 
-<div class="page-head">
-    <div>
-        <h1 class="h3">@Greeting, @(Auth.User?.FullName.Split(' ')[0])</h1>
-        <div class="page-sub">Ajker showroom er hisab ek nojore.</div>
-    </div>
-    <div class="d-flex gap-2">
-        @if (Auth.IsAdmin)
+@* ---------- Tab + clock + period ---------- *@
+<div class="dash-bar">
+    <nav class="dash-tabs">
+        @foreach (var t in Tabs)
         {
-            <a class="btn btn-outline-secondary" href="product/add"><i class="bi bi-plus-square me-1"></i> Add Product</a>
+            <button class="@(tab == t ? "on" : "")" @onclick="() => tab = t">@t</button>
         }
-        <a class="btn btn-primary" href="sales/new"><i class="bi bi-cart-plus me-1"></i> New Sale</a>
+    </nav>
+
+    <div class="dash-tools">
+        <div class="dash-clock" title="Bangladesh time">
+            <span>DHAKA TIME</span>
+            <strong>@DhakaNow.ToString("h:mm:ss tt")</strong>
+        </div>
+
+        <div class="dropdown-lite">
+            <button class="btn btn-outline-secondary dash-period" @onclick="() => periodOpen = !periodOpen">
+                <i class="bi bi-calendar3 me-2"></i>@PeriodTitle<i class="bi bi-chevron-down ms-2 small"></i>
+            </button>
+            @if (periodOpen)
+            {
+                <div class="app-click-away" @onclick="() => periodOpen = false"></div>
+                <div class="app-menu" style="right:0; min-width:190px">
+                    @foreach (var p in StatsPeriod.All)
+                    {
+                        <button @onclick="() => SetPeriodAsync(p.Key)">
+                            <i class="bi bi-check-lg @(period == p.Key ? "" : "invisible") fw-bold"></i> @p.Title
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+
+        <button class="btn btn-outline-secondary dash-icon-btn" title="Refresh" disabled="@loading" @onclick="LoadAsync">
+            <i class="bi bi-arrow-clockwise @(loading ? "spin" : "")"></i>
+        </button>
     </div>
 </div>
 
@@ -23,7 +50,7 @@
     <div class="alert alert-danger">@error</div>
 }
 
-@if (summary == null)
+@if (stats == null)
 {
     @if (string.IsNullOrEmpty(error))
     {
@@ -32,142 +59,266 @@
 }
 else
 {
-    <div class="row g-3 mb-4">
+    @* ---------- KPI ---------- *@
+    <div class="row g-3 mb-3">
         <div class="col-6 col-xl-3">
-            <StatCard Icon="bi-cash-stack" Tone="primary" Label="Ajker sale" Value="@Fmt.Money(summary.TodaySales)">@summary.TodayInvoices ta invoice</StatCard>
+            <KpiCard Label="Total orders" Value="@stats.Orders.Current.ToString("N0")" Icon="bi-bag-check" Tone="primary"
+                     Kpi="stats.Orders" Previous="@stats.Orders.Previous.ToString("N0")" />
         </div>
-        @if (Auth.IsAdmin)
+        <div class="col-6 col-xl-3">
+            <KpiCard Label="Revenue" Value="@Tk(stats.Revenue.Current)" Icon="bi-cash-stack" Tone="success"
+                     Kpi="stats.Revenue" Previous="@Tk(stats.Revenue.Previous)" />
+        </div>
+        @if (stats.CanSeeProfit)
         {
             <div class="col-6 col-xl-3">
-                <StatCard Icon="bi-graph-up-arrow" Tone="success" Label="Ajker profit" Value="@Fmt.Money(summary.TodayProfit)" ValueClass="@(summary.TodayProfit < 0 ? "text-danger" : "")">Discount bad diye</StatCard>
+                <KpiCard Label="Profit" Value="@Tk(stats.Profit.Current)" Icon="bi-graph-up-arrow" Tone="purple"
+                         Kpi="stats.Profit" Previous="@Tk(stats.Profit.Previous)" />
+            </div>
+        }
+        else
+        {
+            <div class="col-6 col-xl-3">
+                <KpiCard Label="Items sold" Value="@($"{stats.ItemsSold.Current:N0} pcs")" Icon="bi-box-seam" Tone="purple"
+                         Kpi="stats.ItemsSold" Previous="@($"{stats.ItemsSold.Previous:N0} pcs")" />
             </div>
         }
         <div class="col-6 col-xl-3">
-            <StatCard Icon="bi-wallet2" Tone="info" Label="Ajker baki joma" Value="@Fmt.Money(summary.TodayCollection)">Customer theke paoa</StatCard>
-        </div>
-        <div class="col-6 col-xl-3">
-            <StatCard Icon="bi-calendar-check" Tone="purple" Label="Ei maser sale" Value="@Fmt.Money(summary.MonthSales)">
-                @if (Auth.IsAdmin)
-                {
-                    <span>Profit @Fmt.Money(summary.MonthProfit)</span>
-                }
-                else
-                {
-                    <span>@DateTime.Today.ToString("MMMM yyyy")</span>
-                }
-            </StatCard>
-        </div>
-        <div class="col-6 col-xl-3">
-            <StatCard Icon="bi-exclamation-diamond" Tone="danger" Label="Mot baki (due)" Value="@Fmt.Money(summary.TotalDue)" ValueClass="text-danger">
-                <a href="customers">@summary.TotalCustomers jon customer</a>
-            </StatCard>
-        </div>
-        <div class="col-6 col-xl-3">
-            <StatCard Icon="bi-box-seam" Tone="primary" Label="Products" Value="@summary.TotalProducts.ToString()">@summary.TotalVariants ta size/color</StatCard>
-        </div>
-        <div class="col-6 col-xl-3">
-            <StatCard Icon="bi-stack" Tone="success" Label="Mot stock" Value="@($"{summary.TotalStockQty} pcs")">
-                @if (Auth.IsAdmin)
-                {
-                    <span>Kena dame @Fmt.Money(summary.StockValue)</span>
-                }
-            </StatCard>
-        </div>
-        <div class="col-6 col-xl-3">
-            <StatCard Icon="bi-exclamation-triangle" Tone="warning" Label="Low stock" Value="@summary.LowStockCount.ToString()" ValueClass="@(summary.LowStockCount > 0 ? "text-warning" : "")">Size/color reorder level e</StatCard>
+            <KpiCard Label="Collection (joma)" Value="@Tk(stats.Collection.Current)" Icon="bi-wallet2" Tone="info"
+                     Kpi="stats.Collection" Previous="@Tk(stats.Collection.Previous)" />
         </div>
     </div>
 
-    <div class="row g-3">
-        <div class="col-lg-5">
-            <div class="card h-100">
-                <div class="card-header d-flex justify-content-between">
-                    <span>Low Stock</span>
-                    @if (Auth.IsAdmin)
-                    {
-                        <a href="stock/new">Stock In</a>
-                    }
-                </div>
-                @if (summary.LowStockItems.Count == 0)
-                {
-                    <div class="card-body text-muted">Shob product er stock thik ache.</div>
-                }
-                else
-                {
-                    <div class="table-responsive">
-                        <table class="table table-sm mb-0">
-                        <thead class="table-light"><tr><th>Product</th><th>Size / Color</th><th class="text-end">Stock</th><th class="text-end">Reorder</th></tr></thead>
-                        <tbody>
-                            @foreach (var item in summary.LowStockItems)
-                            {
-                                <tr>
-                                    <td>@item.ProductName</td>
-                                    <td>@item.VariantName</td>
-                                    <td class="text-end"><StockBadge Quantity="item.Quantity" ReorderLevel="item.ReorderLevel" /></td>
-                                    <td class="text-end">@item.ReorderLevel</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
+    @switch (tab)
+    {
+        case "My Dashboard":
+            <div class="row g-3 mb-3">
+                <div class="col-lg-5">
+                    <div class="card h-100">
+                        <div class="card-header dash-card-head">
+                            <span>Payment status</span>
+                            <span class="small text-muted fw-normal">@stats.Orders.Current.ToString("N0") ta invoice</span>
+                        </div>
+                        <div class="card-body">
+                            <DonutChart Items="stats.ByPaymentStatus" Colors="StatusColors" Icons="StatusIcons" ValueFormat="Tk"
+                                        CenterLabel="Total orders" CenterValue="@stats.ByPaymentStatus.Sum(x => x.Count).ToString()"
+                                        NameHeader="Status" CountHeader="Invoice" AriaLabel="Invoice gulo paid, partial ar due onujayi" />
+                        </div>
                     </div>
-                }
-            </div>
-        </div>
-        <div class="col-lg-7">
-            <div class="card h-100">
-                <div class="card-header d-flex justify-content-between">
-                    <span>Recent Sales</span>
-                    <a href="sales">Shob dekhun</a>
                 </div>
-                @if (summary.RecentSales.Count == 0)
+                <div class="col-lg-7">
+                    <div class="card h-100">
+                        <div class="card-header dash-card-head">
+                            <span>Sales by category</span>
+                            <span class="small text-muted fw-normal">@PeriodTitle</span>
+                        </div>
+                        <div class="card-body">
+                            <HBarChart Items="stats.ByCategory" ValueFormat="Tk" NameHeader="Category" CountHeader="Pcs" ValueHeader="Revenue"
+                                       AriaLabel="Category onujayi bikri" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card mb-3">
+                <div class="card-header dash-card-head">
+                    <span>Revenue trend</span>
+                    <span class="small text-muted fw-normal">@(stats.Trend.Count > 0 && stats.Period is StatsPeriod.Today or StatsPeriod.Yesterday ? "Ghonta onujayi" : "Din onujayi")</span>
+                </div>
+                <div class="card-body">
+                    <TrendChart Points="stats.Trend" ValueFormat="Tk" />
+                </div>
+            </div>
+            break;
+
+        case "Sales":
+            <div class="card mb-3">
+                <div class="card-header dash-card-head"><span>Revenue trend</span><span class="small text-muted fw-normal">@PeriodTitle</span></div>
+                <div class="card-body"><TrendChart Points="stats.Trend" ValueFormat="Tk" /></div>
+            </div>
+            <div class="card">
+                <div class="card-header dash-card-head"><span>Recent sales</span><a href="sales" class="small">Shob dekhun</a></div>
+                @if (summary == null || summary.RecentSales.Count == 0)
                 {
                     <div class="card-body text-muted">Ekhono kono sale nai.</div>
                 }
                 else
                 {
                     <div class="table-responsive">
-                        <table class="table table-sm table-hover mb-0">
-                        <thead class="table-light"><tr><th>Invoice</th><th>Date</th><th>Customer</th><th class="text-end">Total</th><th class="text-end">Due</th></tr></thead>
-                        <tbody>
-                            @foreach (var s in summary.RecentSales)
-                            {
-                                <tr>
-                                    <td><a href="sales/@s.Id">@s.InvoiceNo</a></td>
-                                    <td>@Fmt.Date(s.SaleDate)</td>
-                                    <td>@(s.CustomerName ?? "Walk-in")</td>
-                                    <td class="text-end">@Fmt.Money(s.GrandTotal)</td>
-                                    <td class="text-end">@Fmt.Money(s.DueAmount)</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
+                        <table class="table table-hover mb-0">
+                            <thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th class="text-end">Total</th><th class="text-end">Due</th></tr></thead>
+                            <tbody>
+                                @foreach (var s in summary.RecentSales)
+                                {
+                                    <tr>
+                                        <td><a href="sales/@s.Id">@s.InvoiceNo</a></td>
+                                        <td>@Fmt.Date(s.SaleDate)</td>
+                                        <td>@(s.CustomerName ?? "Walk-in")</td>
+                                        <td class="text-end">@Fmt.Money(s.GrandTotal)</td>
+                                        <td class="text-end @(s.DueAmount > 0 ? "text-danger" : "")">@Fmt.Money(s.DueAmount)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
                     </div>
                 }
             </div>
-        </div>
-    </div>
+            break;
+
+        case "Products":
+            <div class="row g-3">
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header dash-card-head"><span>Top products</span><span class="small text-muted fw-normal">Pcs onujayi · @PeriodTitle</span></div>
+                        <div class="card-body">
+                            <HBarChart Items="TopProductBars" Color="@ChartColors.Categorical[2]" ValueFormat="@(v => $"{v:N0} pcs")"
+                                       NameHeader="Product" CountHeader="Pcs" ValueHeader="Sold" AriaLabel="Beshi bikri hoyeche emon product" />
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header dash-card-head">
+                            <span>Low stock <span class="badge bg-warning-subtle text-warning-emphasis ms-1">@stats.LowStockCount</span></span>
+                            @if (Auth.Can(Perms.StockAdd))
+                            {
+                                <a href="stock/new" class="small">Stock In</a>
+                            }
+                        </div>
+                        @if (summary == null || summary.LowStockItems.Count == 0)
+                        {
+                            <div class="card-body text-muted">Shob product er stock thik ache.</div>
+                        }
+                        else
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-sm mb-0">
+                                    <thead><tr><th>Product</th><th>Size / Color</th><th class="text-end">Stock</th><th class="text-end">Reorder</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var item in summary.LowStockItems)
+                                        {
+                                            <tr>
+                                                <td>@item.ProductName</td>
+                                                <td>@item.VariantName</td>
+                                                <td class="text-end"><StockBadge Quantity="item.Quantity" ReorderLevel="item.ReorderLevel" /></td>
+                                                <td class="text-end">@item.ReorderLevel</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+            break;
+
+        case "Customers":
+            <div class="row g-3">
+                <div class="col-6 col-xl-3">
+                    <KpiCard Label="New customers" Value="@stats.NewCustomers.Current.ToString("N0")" Icon="bi-person-plus" Tone="pink"
+                             Kpi="stats.NewCustomers" Previous="@stats.NewCustomers.Previous.ToString("N0")" />
+                </div>
+                <div class="col-6 col-xl-3">
+                    <KpiCard Label="Mot baki" Value="@Tk(summary?.TotalDue ?? 0)" Icon="bi-exclamation-diamond" Tone="danger" />
+                </div>
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header dash-card-head"><span>Beshi baki ache emon customer</span><a href="customers" class="small">Shob customer</a></div>
+                        @if (stats.TopDueCustomers.Count == 0)
+                        {
+                            <div class="card-body text-muted">Kono customer er baki nai. 🎉</div>
+                        }
+                        else
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead><tr><th>Customer</th><th>Phone</th><th class="text-end">Baki</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var c in stats.TopDueCustomers)
+                                        {
+                                            <tr>
+                                                <td><a href="customers/@c.Id">@c.Name</a></td>
+                                                <td>@PhoneHelper.Pretty(c.Phone)</td>
+                                                <td class="text-end text-danger fw-semibold">@Tk(c.Due)</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+            break;
+    }
 }
 
 @code {
+    // Jemon /?period=7d - bookmark kora jay
+    [SupplyParameterFromQuery(Name = "period")] public string? PeriodParam { get; set; }
+
+    private static readonly string[] Tabs = { "My Dashboard", "Sales", "Products", "Customers" };
+    private static readonly string[] StatusColors = { ChartColors.Good, ChartColors.Warning, ChartColors.Critical };
+    private static readonly Dictionary<string, string> StatusIcons = new()
+    {
+        ["Paid"] = "bi-check-circle", ["Partial"] = "bi-hourglass-split", ["Due"] = "bi-exclamation-circle"
+    };
+
+    private DashboardStats? stats;
     private DashboardSummary? summary;
     private string? error;
+    private string tab = "My Dashboard";
+    private string period = StatsPeriod.Today;
+    private bool periodOpen;
+    private bool loading;
+    private Timer? clock;
 
-    private static string Greeting => DateTime.Now.Hour switch
-    {
-        < 12 => "Good morning",
-        < 17 => "Good afternoon",
-        _ => "Good evening"
-    };
+    // Bangladesh e DST nai, tai UTC+6
+    private static DateTime DhakaNow => DateTime.UtcNow.AddHours(6);
+
+    private string PeriodTitle => StatsPeriod.All.First(p => p.Key == period).Title;
+
+    private List<NamedValue> TopProductBars => stats!.TopProducts
+        .Select(p => new NamedValue { Name = p.Name, Value = p.Quantity, Count = p.Quantity })
+        .ToList();
 
     protected override async Task OnInitializedAsync()
     {
+        if (StatsPeriod.All.Any(p => p.Key == PeriodParam)) period = PeriodParam!;
+        clock = new Timer(_ => InvokeAsync(StateHasChanged), null, 1000, 1000);
+        await LoadAsync();
+    }
+
+    private async Task SetPeriodAsync(string p)
+    {
+        periodOpen = false;
+        period = p;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loading = true;
         try
         {
-            summary = await SaleService.GetDashboardAsync();
+            error = null;
+            var statsTask = SaleService.GetStatsAsync(period);
+            var summaryTask = SaleService.GetDashboardAsync();
+            stats = await statsTask;
+            summary = await summaryTask;
         }
         catch (Exception ex)
         {
             error = "API theke data ana jay nai. API cholche kina check korun. (" + ex.Message + ")";
         }
+        finally
+        {
+            loading = false;
+        }
     }
+
+    // ৳10,550 / ৳1.2L
+    private static string Tk(decimal value) => "৳" + value.ToString("N0");
+
+    public void Dispose() => clock?.Dispose();
 }

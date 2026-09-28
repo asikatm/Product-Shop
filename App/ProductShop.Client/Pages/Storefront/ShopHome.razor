@@ -1,0 +1,129 @@
+@page "/shop"
+@page "/shop/category/{CategoryId:int}"
+@layout ShopLayout
+@attribute [PublicPage]
+@inject StoreService Store
+@inject CartService Cart
+@inject NavigationManager Nav
+
+<PageTitle>@(category?.Name ?? "শাড়ি কালেকশন")</PageTitle>
+
+<div class="st-wrap">
+    @if (CategoryId == null && string.IsNullOrWhiteSpace(Q))
+    {
+        <section class="st-hero">
+            <div>
+                <div class="st-hero-tag">নতুন কালেকশন</div>
+                <h1>ঐতিহ্য আর আধুনিকতার মেলবন্ধন</h1>
+                <p>জামদানি, এমব্রয়ডারি, ডিজিটাল প্রিন্ট — পছন্দের শাড়ি অর্ডার করুন, টাকা দিন হাতে পেয়ে।</p>
+                <div class="st-hero-badges">
+                    <span><i class="bi bi-truck"></i> হোম ডেলিভারি</span>
+                    <span><i class="bi bi-cash-coin"></i> ক্যাশ অন ডেলিভারি</span>
+                    <span><i class="bi bi-patch-check"></i> অরিজিনাল কোয়ালিটি</span>
+                </div>
+            </div>
+        </section>
+    }
+
+    <div class="st-section-head">
+        <h2>@Heading</h2>
+        @if (products != null)
+        {
+            <span>@products.Count টি পণ্য</span>
+        }
+    </div>
+
+    @if (error != null)
+    {
+        <div class="alert alert-danger">@error</div>
+    }
+
+    @if (products == null)
+    {
+        <div class="loading">Loading...</div>
+    }
+    else if (products.Count == 0)
+    {
+        <div class="st-empty"><i class="bi bi-search"></i><p>কোনো পণ্য পাওয়া যায়নি।</p><a class="st-btn" href="shop">সব শাড়ি দেখুন</a></div>
+    }
+    else
+    {
+        <div class="st-grid">
+            @foreach (var p in products)
+            {
+                <article class="st-card">
+                    <a class="st-card-img" href="shop/product/@p.Id">
+                        @if (p.Images.Count > 0)
+                        {
+                            <img src="@Store.ImageUrl(p.Images[0])" alt="@p.Name" loading="lazy" />
+                        }
+                        else
+                        {
+                            <i class="bi bi-image"></i>
+                        }
+                        @if (p.DiscountPercent > 0)
+                        {
+                            <span class="st-off">-@p.DiscountPercent%</span>
+                        }
+                    </a>
+                    <div class="st-card-body">
+                        <a class="st-card-name" href="shop/product/@p.Id">@p.Name</a>
+                        <div class="st-price">
+                            <strong>৳ @p.FinalPrice.ToString("N0")</strong>
+                            @if (p.FinalPrice < p.Price)
+                            {
+                                <del>৳ @p.Price.ToString("N0")</del>
+                            }
+                        </div>
+                        <button class="st-btn w-100" @onclick="() => OrderAsync(p)"><i class="bi bi-bag-plus me-1"></i>অর্ডার করুন</button>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int? CategoryId { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? Q { get; set; }
+
+    private List<StoreProduct>? products;
+    private StoreCategory? category;
+    private string? error;
+
+    private string Heading => !string.IsNullOrWhiteSpace(Q) ? $"\"{Q}\" খোঁজার ফলাফল" : category?.Name ?? "সব শাড়ি";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        products = null;
+        error = null;
+        try
+        {
+            products = await Store.GetProductsAsync(CategoryId, Q);
+            category = CategoryId == null ? null : (await Store.GetCategoriesAsync()).FirstOrDefault(c => c.Id == CategoryId);
+        }
+        catch (Exception)
+        {
+            products = new();
+            error = "পণ্য লোড হয়নি, একটু পর আবার চেষ্টা করুন।";
+        }
+    }
+
+    // Ekta size hole shoja cart e + checkout, na hole product page e size bachte
+    private async Task OrderAsync(StoreProduct p)
+    {
+        if (p.Variants.Count != 1)
+        {
+            Nav.NavigateTo($"shop/product/{p.Id}");
+            return;
+        }
+
+        var v = p.Variants[0];
+        await Cart.AddAsync(new CartLine
+        {
+            VariantId = v.Id, ProductId = p.Id, Name = p.Name, VariantLabel = v.Label,
+            Image = p.Images.FirstOrDefault(), UnitPrice = v.FinalPrice, Quantity = 1
+        });
+        Nav.NavigateTo("shop/checkout");
+    }
+}

@@ -1,0 +1,146 @@
+@page "/web-orders"
+@attribute [RequirePermission(Perms.WebOrdersView)]
+@inject WebOrderService Orders
+@inject NavigationManager Nav
+
+<PageTitle>Web Orders</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1 class="h3">Web Orders</h1>
+        <div class="page-sub">Website theke asha order. Phone e kotha bole <strong>Confirm</strong> korun — invoice toiri hobe ar stock kombe.</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="shop" target="_blank"><i class="bi bi-box-arrow-up-right me-1"></i>Website dekhun</a>
+        <button class="btn btn-outline-secondary" @onclick="LoadAsync"><i class="bi bi-arrow-clockwise me-1"></i>Reload</button>
+    </div>
+</div>
+
+<nav class="dash-tabs mb-3" style="border-bottom:1px solid var(--ui-border)">
+    @foreach (var s in Tabs)
+    {
+        <button class="@(status == s ? "on" : "")" @onclick="() => SetStatusAsync(s)">
+            @s
+            <span class="badge rounded-pill ms-1 @BadgeClass(s)">@CountOf(s)</span>
+        </button>
+    }
+</nav>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (orders == null)
+{
+    <div class="loading">Loading...</div>
+}
+else
+{
+    <div class="mb-3" style="max-width:420px">
+        <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input class="form-control" placeholder="Order no, naam ba phone..." @bind="search" @bind:event="oninput" />
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Order</th>
+                        <th>Customer</th>
+                        <th>Address</th>
+                        <th class="text-end">Items</th>
+                        <th class="text-end">Total</th>
+                        <th>Status</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Filtered.Any())
+                    {
+                        <tr><td colspan="7" class="text-center text-muted py-4">Kono order nai.</td></tr>
+                    }
+                    @foreach (var o in Filtered)
+                    {
+                        <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo("web-orders/" + o.Id))">
+                            <td>
+                                <div class="fw-semibold">@o.OrderNo</div>
+                                <div class="small text-muted">@Ago(o.CreatedAt)</div>
+                            </td>
+                            <td>
+                                <div>@o.CustomerName</div>
+                                <div class="small text-muted">@PhoneHelper.Pretty(o.Phone)</div>
+                            </td>
+                            <td class="small text-muted text-truncate" style="max-width:240px">@o.Address</td>
+                            <td class="text-end">@o.Items.Sum(i => i.Quantity) pcs</td>
+                            <td class="text-end fw-semibold">@Fmt.Money(o.Total)</td>
+                            <td><WebOrderBadge Status="@o.Status" /></td>
+                            <td class="text-end"><a class="btn btn-sm btn-outline-secondary" href="web-orders/@o.Id" @onclick:stopPropagation>Details</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly string[] Tabs = { WebOrderStatus.Pending, WebOrderStatus.Confirmed, WebOrderStatus.Delivered, WebOrderStatus.Cancelled, "All" };
+
+    private List<WebOrder>? orders;
+    private Dictionary<string, int> counts = new();
+    private string status = WebOrderStatus.Pending;
+    private string search = string.Empty;
+    private string? error;
+
+    private IEnumerable<WebOrder> Filtered => orders!.Where(o => string.IsNullOrWhiteSpace(search)
+        || o.OrderNo.Contains(search, StringComparison.OrdinalIgnoreCase)
+        || o.CustomerName.Contains(search, StringComparison.OrdinalIgnoreCase)
+        || o.Phone.Contains(search.Replace("-", "").Trim()));
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task SetStatusAsync(string s)
+    {
+        status = s;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            error = null;
+            orders = await Orders.GetAllAsync(status == "All" ? null : status);
+            counts = await Orders.GetCountsAsync();
+        }
+        catch (Exception ex)
+        {
+            orders = new();
+            error = "Data ana jay nai: " + ex.Message;
+        }
+    }
+
+    private int CountOf(string s) => s == "All" ? counts.Values.Sum() : counts.GetValueOrDefault(s);
+
+    private static string BadgeClass(string s) => s switch
+    {
+        WebOrderStatus.Pending => "bg-warning-subtle text-warning-emphasis",
+        WebOrderStatus.Confirmed => "bg-primary-subtle text-primary-emphasis",
+        WebOrderStatus.Delivered => "bg-success-subtle text-success-emphasis",
+        WebOrderStatus.Cancelled => "bg-danger-subtle text-danger-emphasis",
+        _ => "bg-secondary-subtle text-secondary-emphasis"
+    };
+
+    private static string Ago(DateTime time)
+    {
+        var span = DateTime.Now - time;
+        if (span.TotalMinutes < 1) return "Ekhon";
+        if (span.TotalHours < 1) return $"{(int)span.TotalMinutes} min age";
+        if (span.TotalDays < 1) return $"{(int)span.TotalHours} ghonta age";
+        return Fmt.Date(time);
+    }
+}

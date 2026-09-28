@@ -15,12 +15,14 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _db;
     private readonly TokenService _tokens;
     private readonly IPasswordHasher<AppUser> _hasher;
+    private readonly PermissionService _permissions;
 
-    public AuthController(AppDbContext db, TokenService tokens, IPasswordHasher<AppUser> hasher)
+    public AuthController(AppDbContext db, TokenService tokens, IPasswordHasher<AppUser> hasher, PermissionService permissions)
     {
         _db = db;
         _tokens = tokens;
         _hasher = hasher;
+        _permissions = permissions;
     }
 
     // POST: api/auth/login
@@ -29,7 +31,7 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<LoginResponse>> Login(LoginRequest request)
     {
         var username = request.Username.Trim();
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Username == username);
+        var user = await _db.Users.Include(u => u.UserRoles).ThenInclude(ur => ur.Role).FirstOrDefaultAsync(u => u.Username == username);
 
         if (user == null || _hasher.VerifyHashedPassword(user, user.PasswordHash, request.Password) == PasswordVerificationResult.Failed)
             return BadRequest("Username ba password vul.");
@@ -40,7 +42,24 @@ public class AuthController : ControllerBase
 
         user.LastLoginAt = DateTime.Now;
         await _db.SaveChangesAsync();
-        return _tokens.Create(user);
+
+        var response = _tokens.Create(user);
+        var access = await _permissions.GetAsync(user.Id);
+        response.Permissions = access.Permissions.ToList();
+        response.IsSuperAdmin = access.IsSuperAdmin;
+        return response;
+    }
+
+    // GET: api/auth/me
+    // App chalu howar somoy ekhonkar role / permission ane (admin bodlale page reload e notun ta pay)
+    [HttpGet("me")]
+    public async Task<ActionResult<CurrentUser>> Me()
+    {
+        var user = await _db.Users.Include(u => u.UserRoles).ThenInclude(ur => ur.Role).FirstOrDefaultAsync(u => u.Id == User.UserId());
+        if (user == null || !user.IsActive) return Unauthorized();
+
+        var access = await _permissions.GetAsync(user.Id);
+        return new CurrentUser { User = user.ToInfo(), Permissions = access.Permissions.ToList(), IsSuperAdmin = access.IsSuperAdmin };
     }
 
     // POST: api/auth/register
@@ -65,10 +84,13 @@ public class AuthController : ControllerBase
             FullName = request.FullName.Trim(),
             Phone = phone,
             Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim().ToLowerInvariant(),
-            Role = Roles.Salesman,
             IsActive = false
         };
         user.PasswordHash = _hasher.HashPassword(user, request.Password);
+
+        // Default "Salesman" role (thakle); admin approve er somoy bodlate pare
+        var salesman = await _db.AppRoles.FirstOrDefaultAsync(r => r.Name == Roles.Salesman);
+        if (salesman != null) user.UserRoles.Add(new AppUserRole { RoleId = salesman.Id });
 
         _db.Users.Add(user);
         await _db.SaveChangesAsync();

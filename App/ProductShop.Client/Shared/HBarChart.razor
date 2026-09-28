@@ -1,0 +1,59 @@
+@* Horizontal bar: category / product er tulona (ek rong, value bar er shesh e) *@
+
+<div class="viz">
+    <div class="viz-toggle" role="group" aria-label="View">
+        <button class="@(table ? "" : "on")" @onclick="() => table = false">Chart</button>
+        <button class="@(table ? "on" : "")" @onclick="() => table = true">Table</button>
+    </div>
+
+    @if (Items.Count == 0 || Max == 0)
+    {
+        <div class="viz-empty"><i class="bi bi-bar-chart"></i><span>Ei shomoye kono data nai</span></div>
+    }
+    else if (table)
+    {
+        <table class="table table-sm mb-0 viz-table">
+            <thead><tr><th>@NameHeader</th><th class="text-end">@CountHeader</th><th class="text-end">@ValueHeader</th></tr></thead>
+            <tbody>
+                @foreach (var item in Items)
+                {
+                    <tr><td>@item.Name</td><td class="text-end">@item.Count</td><td class="text-end">@Format(item.Value)</td></tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <div class="hbar" role="img" aria-label="@AriaLabel">
+            @foreach (var item in Items)
+            {
+                <div class="hbar-row" title="@($"{item.Name}: {Format(item.Value)} · {item.Count} {CountHeader.ToLower()}")">
+                    <div class="hbar-label">@item.Name</div>
+                    <div class="hbar-track">
+                        <div class="hbar-bar" style="width:@Pct(item.Value); background:@(item.Name == "Other" ? ChartColors.Other : Color)"></div>
+                        <span class="hbar-value">@Format(item.Value)</span>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<NamedValue> Items { get; set; } = new();
+    [Parameter] public string Color { get; set; } = ChartColors.Revenue;
+    [Parameter] public Func<decimal, string>? ValueFormat { get; set; }
+    [Parameter] public string NameHeader { get; set; } = "Name";
+    [Parameter] public string CountHeader { get; set; } = "Qty";
+    [Parameter] public string ValueHeader { get; set; } = "Amount";
+    [Parameter] public string AriaLabel { get; set; } = "Bar chart";
+
+    private bool table;
+
+    private decimal Max => Items.Count == 0 ? 0 : Items.Max(i => i.Value);
+
+    // Shobcheye boro ta 78% - baki jaygay value lekha
+    private string Pct(decimal value) => $"{(Max == 0 ? 0 : value / Max * 78m):0.##}%";
+
+    private string Format(decimal value) => ValueFormat?.Invoke(value) ?? value.ToString("N0");
+}

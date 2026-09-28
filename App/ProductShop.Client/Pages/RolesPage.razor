@@ -1,0 +1,239 @@
+@page "/roles"
+@attribute [RequirePermission(Perms.RolesView)]
+@inject RoleService RoleService
+@inject AuthState Auth
+@inject IJSRuntime JS
+
+<PageTitle>Roles</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1 class="h3">Roles</h1>
+        <div class="page-crumb pf-crumb">Administrative / Roles</div>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary" @onclick="LoadAsync"><i class="bi bi-arrow-clockwise me-1"></i>Reload</button>
+        @if (Auth.Can(Perms.RolesAdd))
+        {
+            <button class="btn btn-primary" @onclick="StartAdd"><i class="bi bi-plus-lg me-1"></i>Add New</button>
+        }
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger d-flex gap-2"><i class="bi bi-exclamation-triangle-fill"></i><span>@error</span></div>
+}
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-success d-flex gap-2"><i class="bi bi-check-circle-fill"></i><span>@message</span></div>
+}
+
+@if (roles == null)
+{
+    <div class="loading">Loading...</div>
+}
+else
+{
+    <div class="mb-3" style="max-width:420px">
+        <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input class="form-control" placeholder="Search" @bind="search" @bind:event="oninput" />
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Role</th>
+                        <th>Description</th>
+                        <th class="text-center">Users</th>
+                        <th>Menu access</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in Filtered)
+                    {
+                        <tr>
+                            <td>
+                                <div class="fw-semibold d-flex align-items-center gap-2">
+                                    <span class="role-avatar tone-@MenuStyle.RoleTone(r)" style="width:32px;height:32px;font-size:.9rem"><i class="bi @(r.IsSystem ? "bi-shield-fill-check" : "bi-person-badge-fill")"></i></span>
+                                    @r.Name
+                                    @if (r.IsSystem)
+                                    {
+                                        <span class="badge bg-primary-subtle text-primary-emphasis ms-1"><i class="bi bi-shield-check me-1"></i>System</span>
+                                    }
+                                </div>
+                            </td>
+                            <td class="small text-muted">@r.Description</td>
+                            <td class="text-center"><span class="badge bg-secondary-subtle text-secondary-emphasis">@r.UserCount</span></td>
+                            <td>
+                                @if (r.IsSystem)
+                                {
+                                    <span class="small text-muted">Shob menu, shob kaaj</span>
+                                }
+                                else
+                                {
+                                    var menus = MenusOf(r);
+                                    if (menus.Count == 0)
+                                    {
+                                        <span class="small text-danger">Kono menu nai</span>
+                                    }
+                                    <div class="d-flex flex-wrap gap-1">
+                                        @foreach (var m in menus)
+                                        {
+                                            <span class="badge fw-semibold tone-@MenuStyle.Tone(m.Key)"><i class="bi @m.Icon me-1"></i>@m.Title</span>
+                                        }
+                                    </div>
+                                }
+                            </td>
+                            <td class="text-end text-nowrap">
+                                @if (Auth.Can(Perms.RolesEdit))
+                                {
+                                    <a class="btn btn-sm btn-primary" href="menu-permission?role=@r.Id" title="Menu permission"><i class="bi bi-ui-checks-grid me-1"></i>Permission</a>
+                                    <button class="btn btn-sm btn-outline-secondary" title="Edit" @onclick="() => StartEdit(r)"><i class="bi bi-pencil"></i></button>
+                                }
+                                @if (Auth.Can(Perms.RolesDelete) && !r.IsSystem)
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary text-danger" title="Delete" @onclick="() => DeleteAsync(r)"><i class="bi bi-trash"></i></button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@if (form != null)
+{
+    <div class="ui-modal-backdrop" @onclick="() => form = null"></div>
+    <div class="ui-modal" role="dialog" aria-modal="true">
+        <div class="ui-modal-head">
+            <h2 class="h5 mb-0">@(form.Id == 0 ? "Add role" : "Edit role")</h2>
+            <button class="btn btn-sm btn-link text-muted" @onclick="() => form = null"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <EditForm Model="form" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+            <div class="ui-modal-body">
+                @if (!string.IsNullOrEmpty(formError))
+                {
+                    <div class="alert alert-danger py-2 small">@formError</div>
+                }
+                <div class="mb-3">
+                    <label class="form-label">Role name <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="form.Name" placeholder="Jemon: Manager, Cashier" disabled="@editingSystem" />
+                    <ValidationMessage For="() => form.Name" />
+                </div>
+                <div>
+                    <label class="form-label">Description</label>
+                    <InputTextArea class="form-control" rows="2" @bind-Value="form.Description" placeholder="Ei role ki kaaj kore" />
+                </div>
+                @if (form.Id == 0)
+                {
+                    <div class="pf-hint mt-3"><i class="bi bi-info-circle me-1"></i>Save er por <strong>Permission</strong> button diye menu access din.</div>
+                }
+            </div>
+            <div class="ui-modal-foot">
+                <button type="button" class="btn btn-light border" @onclick="() => form = null">Cancel</button>
+                <button type="submit" class="btn btn-primary px-3" disabled="@busy"><i class="bi bi-check2 me-1"></i>Save</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@code {
+    private List<RoleInfo>? roles;
+    private RoleSaveRequest? form;
+    private bool editingSystem;
+    private string? error;
+    private string? formError;
+    private string? message;
+    private bool busy;
+    private string search = string.Empty;
+
+    private IEnumerable<RoleInfo> Filtered => roles!.Where(r => string.IsNullOrWhiteSpace(search)
+        || r.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+        || (r.Description?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            error = null;
+            roles = await RoleService.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            roles = new List<RoleInfo>();
+            error = "Data ana jay nai: " + ex.Message;
+        }
+    }
+
+    // Je menu er kono permission ache
+    private static List<AppMenu> MenusOf(RoleInfo r) =>
+        AppMenus.All.Where(m => r.Permissions.Any(p => p.StartsWith(m.Key + "."))).ToList();
+
+    private void StartAdd()
+    {
+        form = new RoleSaveRequest();
+        editingSystem = false;
+        formError = null;
+    }
+
+    private void StartEdit(RoleInfo r)
+    {
+        form = new RoleSaveRequest { Id = r.Id, Name = r.Name, Description = r.Description };
+        editingSystem = r.IsSystem;
+        formError = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        busy = true;
+        formError = null;
+        try
+        {
+            if (form!.Id == 0)
+                await RoleService.CreateAsync(form);
+            else
+                await RoleService.UpdateAsync(form);
+
+            message = $"'{form.Name}' role save hoyeche.";
+            form = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            formError = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task DeleteAsync(RoleInfo r)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", $"'{r.Name}' role delete korben?");
+        if (!ok) return;
+
+        try
+        {
+            message = null;
+            await RoleService.DeleteAsync(r.Id);
+            message = $"'{r.Name}' delete hoyeche.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+}

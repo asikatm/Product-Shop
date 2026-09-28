@@ -22,6 +22,37 @@ namespace ProductShop.Api.Data.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("ProductShop.Api.Data.AppRole", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Roles", (string)null);
+                });
+
             modelBuilder.Entity("ProductShop.Api.Data.AppUser", b =>
                 {
                     b.Property<int>("Id")
@@ -56,11 +87,6 @@ namespace ProductShop.Api.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
                     b.Property<string>("Username")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -72,6 +98,35 @@ namespace ProductShop.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("ProductShop.Api.Data.AppUserRole", b =>
+                {
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("int");
+
+                    b.HasKey("UserId", "RoleId");
+
+                    b.HasIndex("RoleId");
+
+                    b.ToTable("UserRoles", (string)null);
+                });
+
+            modelBuilder.Entity("ProductShop.Api.Data.RolePermission", b =>
+                {
+                    b.Property<int>("RoleId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Permission")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.HasKey("RoleId", "Permission");
+
+                    b.ToTable("RolePermissions", (string)null);
                 });
 
             modelBuilder.Entity("ProductShop.Shared.Brand", b =>
@@ -652,6 +707,163 @@ namespace ProductShop.Api.Data.Migrations
                     b.ToTable("Suppliers");
                 });
 
+            modelBuilder.Entity("ProductShop.Shared.WebOrder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CustomerName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal>("DeliveryCharge")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("HandledBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("InvoiceNo")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("OrderNo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int?>("SaleId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<decimal>("SubTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("OrderNo")
+                        .IsUnique();
+
+                    b.HasIndex("SaleId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("WebOrders");
+                });
+
+            modelBuilder.Entity("ProductShop.Shared.WebOrderItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("ProductVariantId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("VariantName")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<int>("WebOrderId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductVariantId");
+
+                    b.HasIndex("WebOrderId");
+
+                    b.ToTable("WebOrderItems");
+                });
+
+            modelBuilder.Entity("ProductShop.Api.Data.AppUserRole", b =>
+                {
+                    b.HasOne("ProductShop.Api.Data.AppRole", "Role")
+                        .WithMany("UserRoles")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ProductShop.Api.Data.AppUser", null)
+                        .WithMany("UserRoles")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("ProductShop.Api.Data.RolePermission", b =>
+                {
+                    b.HasOne("ProductShop.Api.Data.AppRole", null)
+                        .WithMany("Permissions")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ProductShop.Shared.Product", b =>
                 {
                     b.HasOne("ProductShop.Shared.Brand", "Brand")
@@ -760,6 +972,41 @@ namespace ProductShop.Api.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ProductShop.Shared.WebOrder", b =>
+                {
+                    b.HasOne("ProductShop.Shared.Sale", null)
+                        .WithMany()
+                        .HasForeignKey("SaleId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("ProductShop.Shared.WebOrderItem", b =>
+                {
+                    b.HasOne("ProductShop.Shared.ProductVariant", null)
+                        .WithMany()
+                        .HasForeignKey("ProductVariantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ProductShop.Shared.WebOrder", null)
+                        .WithMany("Items")
+                        .HasForeignKey("WebOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ProductShop.Api.Data.AppRole", b =>
+                {
+                    b.Navigation("Permissions");
+
+                    b.Navigation("UserRoles");
+                });
+
+            modelBuilder.Entity("ProductShop.Api.Data.AppUser", b =>
+                {
+                    b.Navigation("UserRoles");
+                });
+
             modelBuilder.Entity("ProductShop.Shared.Product", b =>
                 {
                     b.Navigation("Images");
@@ -775,6 +1022,11 @@ namespace ProductShop.Api.Data.Migrations
                 });
 
             modelBuilder.Entity("ProductShop.Shared.StockEntry", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("ProductShop.Shared.WebOrder", b =>
                 {
                     b.Navigation("Items");
                 });

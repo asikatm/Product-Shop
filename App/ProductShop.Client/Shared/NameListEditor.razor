@@ -1,6 +1,7 @@
 @typeparam TItem where TItem : class, INamedItem, new()
 @inject CatalogService CatalogService
 @inject IJSRuntime JS
+@inject AuthState Auth
 
 @* Category / Brand er list: add, rename, delete *@
 <div class="card h-100">
@@ -11,10 +12,13 @@
             <div class="alert alert-danger py-2">@error</div>
         }
 
+        @if (Auth.Can(Perms.CatalogAdd))
+        {
         <div class="input-group mb-3">
             <input class="form-control" placeholder="Notun @Title.ToLower() er naam" @bind="newName" @bind:event="oninput" @onkeydown="OnNewKeyDown" />
             <button class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(newName)" @onclick="AddAsync">Add</button>
         </div>
+        }
 
         @if (items == null)
         {
@@ -39,8 +43,8 @@
                         else
                         {
                             <span class="me-auto">@item.Name</span>
-                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(item)">Edit</button>
-                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(item)">Delete</button>
+                            @if (Auth.Can(Perms.CatalogEdit)) { <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(item)">Edit</button> }
+                            @if (Auth.Can(Perms.CatalogDelete)) { <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(item)">Delete</button> }
                         }
                     </li>
                 }

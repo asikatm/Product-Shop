@@ -1,6 +1,7 @@
 @page "/stock/{Id:int}"
-@attribute [AdminOnly]
+@attribute [RequirePermission(Perms.StockView)]
 @inject StockService StockService
+@inject AuthState Auth
 @inject IJSRuntime JS
 
 <PageTitle>Stock Entry #@Id</PageTitle>
@@ -22,7 +23,7 @@ else
     <div class="d-flex justify-content-between align-items-center mb-3 no-print">
         <a href="stock">&larr; Stock In list</a>
         <div>
-            <a class="btn btn-outline-primary" href="stock/new">+ New Entry</a>
+            @if (Auth.Can(Perms.StockAdd)) { <a class="btn btn-outline-primary" href="stock/new">+ New Entry</a> }
             <button class="btn btn-primary" @onclick="PrintAsync">Print</button>
         </div>
     </div>

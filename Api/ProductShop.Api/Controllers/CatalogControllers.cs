@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductShop.Api.Data;
+using ProductShop.Api.Services;
 using ProductShop.Shared;
 
 namespace ProductShop.Api.Controllers;
@@ -28,7 +29,7 @@ public abstract class NamedItemControllerBase<T> : ControllerBase where T : clas
     }
 
     [HttpPost]
-    [Authorize(Roles = Roles.Admin)]
+    [Permission(Perms.CatalogAdd)]
     public async Task<ActionResult<T>> Create(T item)
     {
         item.Id = 0;
@@ -42,7 +43,7 @@ public abstract class NamedItemControllerBase<T> : ControllerBase where T : clas
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Permission(Perms.CatalogEdit)]
     public async Task<IActionResult> Update(int id, T item)
     {
         if (id != item.Id) return BadRequest("Id mismatch");
@@ -60,7 +61,7 @@ public abstract class NamedItemControllerBase<T> : ControllerBase where T : clas
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Permission(Perms.CatalogDelete)]
     public async Task<IActionResult> Delete(int id)
     {
         var existing = await Items.FindAsync(id);

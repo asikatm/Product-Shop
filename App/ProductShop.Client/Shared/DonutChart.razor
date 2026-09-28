@@ -1,0 +1,140 @@
+@* Part-to-whole donut (6 ta porjonto). Hover e majhe naam / value, niche legend, Chart / Table toggle. *@
+
+<div class="viz">
+    <div class="viz-toggle" role="group" aria-label="View">
+        <button class="@(table ? "" : "on")" @onclick="() => table = false">Chart</button>
+        <button class="@(table ? "on" : "")" @onclick="() => table = true">Table</button>
+    </div>
+
+    @if (Total == 0)
+    {
+        <div class="viz-empty"><i class="bi bi-pie-chart"></i><span>Ei shomoye kono data nai</span></div>
+    }
+    else if (table)
+    {
+        <table class="table table-sm mb-0 viz-table">
+            <thead><tr><th>@NameHeader</th><th class="text-end">@CountHeader</th><th class="text-end">@ValueHeader</th><th class="text-end">%</th></tr></thead>
+            <tbody>
+                @foreach (var (item, _) in Segments)
+                {
+                    <tr>
+                        <td>@item.Name</td>
+                        <td class="text-end">@item.Count</td>
+                        <td class="text-end">@Format(item.Value)</td>
+                        <td class="text-end">@Percent(item.Value)</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot><tr><th>Total</th><th class="text-end">@Items.Sum(i => i.Count)</th><th class="text-end">@Format(Total)</th><th class="text-end">100%</th></tr></tfoot>
+        </table>
+    }
+    else
+    {
+        <div class="donut-wrap">
+            <svg viewBox="0 0 200 200" class="donut" role="img" aria-label="@AriaLabel">
+                @foreach (var (seg, i) in Arcs.Select((a, i) => (a, i)))
+                {
+                    var idx = i;
+                    <circle cx="100" cy="100" r="@R" fill="none" stroke="@seg.Color" stroke-width="@(hover == idx ? Width + 6 : Width)"
+                            stroke-dasharray="@($"{seg.Length:0.###} {Circ:0.###}")" stroke-dashoffset="@((-seg.Offset).ToString("0.###"))"
+                            transform="rotate(-90 100 100)" class="donut-seg"
+                            @onmouseenter="() => hover = idx" @onmouseleave="() => hover = null">
+                        <title>@seg.Item.Name: @Format(seg.Item.Value) (@Percent(seg.Item.Value))</title>
+                    </circle>
+                }
+            </svg>
+            <div class="donut-center">
+                @if (hover is int h && h < Arcs.Count)
+                {
+                    <div class="donut-center-label">@Arcs[h].Item.Name</div>
+                    <div class="donut-center-value">@Format(Arcs[h].Item.Value)</div>
+                    <div class="donut-center-sub">@Percent(Arcs[h].Item.Value) · @Arcs[h].Item.Count @CountHeader.ToLower()</div>
+                }
+                else
+                {
+                    <div class="donut-center-label">@CenterLabel</div>
+                    <div class="donut-center-value">@CenterValue</div>
+                }
+            </div>
+        </div>
+
+        <ul class="viz-legend">
+            @foreach (var (seg, i) in Arcs.Select((a, i) => (a, i)))
+            {
+                var idx = i;
+                <li class="@(hover == idx ? "on" : "")" @onmouseenter="() => hover = idx" @onmouseleave="() => hover = null">
+                    <span class="viz-swatch" style="background:@seg.Color"></span>
+                    @if (Icons != null && Icons.TryGetValue(seg.Item.Name, out var icon))
+                    {
+                        <i class="bi @icon text-muted"></i>
+                    }
+                    <span class="viz-legend-name">@seg.Item.Name</span>
+                    <span class="viz-legend-count">(@seg.Item.Count)</span>
+                    <span class="viz-legend-value">@Format(seg.Item.Value)</span>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<NamedValue> Items { get; set; } = new();
+
+    // Na dile categorical palette order e
+    [Parameter] public IReadOnlyList<string>? Colors { get; set; }
+
+    // Status legend er icon (naam -> bootstrap icon)
+    [Parameter] public Dictionary<string, string>? Icons { get; set; }
+
+    [Parameter] public Func<decimal, string>? ValueFormat { get; set; }
+    [Parameter] public string CenterLabel { get; set; } = "Total";
+    [Parameter] public string CenterValue { get; set; } = string.Empty;
+    [Parameter] public string NameHeader { get; set; } = "Name";
+    [Parameter] public string CountHeader { get; set; } = "Count";
+    [Parameter] public string ValueHeader { get; set; } = "Amount";
+    [Parameter] public string AriaLabel { get; set; } = "Donut chart";
+
+    private const double R = 78;
+    private const double Width = 26;
+    private const double Gap = 2;   // segment er majhe 2px surface gap
+    private static readonly double Circ = 2 * Math.PI * R;
+
+    private bool table;
+    private int? hover;
+
+    private record Arc(NamedValue Item, string Color, double Length, double Offset);
+
+    private decimal Total => Items.Sum(i => i.Value);
+
+    private IEnumerable<(NamedValue Item, int Index)> Segments => Items.Select((item, i) => (item, i));
+
+    private string ColorOf(NamedValue item, int index) =>
+        item.Name == "Other" ? ChartColors.Other
+        : Colors != null && index < Colors.Count ? Colors[index]
+        : ChartColors.Categorical[Math.Min(index, ChartColors.Categorical.Length - 1)];
+
+    private List<Arc> Arcs
+    {
+        get
+        {
+            var list = new List<Arc>();
+            var total = (double)Total;
+            if (total <= 0) return list;
+
+            var visible = Items.Select((item, i) => (item, i)).Where(x => x.item.Value > 0).ToList();
+            var gap = visible.Count > 1 ? Gap : 0;
+            double offset = 0;
+            foreach (var (item, i) in visible)
+            {
+                var length = Circ * (double)item.Value / total;
+                list.Add(new Arc(item, ColorOf(item, i), Math.Max(0.5, length - gap), offset));
+                offset += length;
+            }
+            return list;
+        }
+    }
+
+    private string Format(decimal value) => ValueFormat?.Invoke(value) ?? value.ToString("N0");
+
+    private string Percent(decimal value) => Total == 0 ? "0%" : $"{value / Total * 100m:0.#}%";
+}

@@ -1,5 +1,6 @@
 @page "/customers/new"
 @page "/customers/edit/{Id:int}"
+@attribute [RequirePermission(Perms.CustomersAdd, Perms.CustomersEdit)]
 @inject CustomerService CustomerService
 @inject NavigationManager Nav
 

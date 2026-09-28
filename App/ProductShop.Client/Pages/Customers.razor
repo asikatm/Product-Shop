@@ -1,11 +1,13 @@
 @page "/customers"
+@attribute [RequirePermission(Perms.CustomersView)]
 @inject CustomerService CustomerService
+@inject AuthState Auth
 
 <PageTitle>Customers</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0">Customers</h1>
-    <a class="btn btn-primary" href="customers/new"><i class="bi bi-person-plus me-1"></i> Add Customer</a>
+    @if (Auth.Can(Perms.CustomersAdd)) { <a class="btn btn-primary" href="customers/new"><i class="bi bi-person-plus me-1"></i> Add Customer</a> }
 </div>
 
 @if (!string.IsNullOrEmpty(error))
@@ -72,7 +74,7 @@ else
                             <td class="text-end @(c.TotalDue > 0 ? "text-danger fw-semibold" : "")">@Fmt.Money(c.TotalDue)</td>
                             <td class="text-end text-nowrap">
                                 <a class="btn btn-sm btn-outline-secondary" href="customers/@c.Id">Details</a>
-                                <a class="btn btn-sm btn-outline-secondary" href="customers/edit/@c.Id" title="Edit"><i class="bi bi-pencil"></i></a>
+                                @if (Auth.Can(Perms.CustomersEdit)) { <a class="btn btn-sm btn-outline-secondary" href="customers/edit/@c.Id" title="Edit"><i class="bi bi-pencil"></i></a> }
                             </td>
                         </tr>
                     }

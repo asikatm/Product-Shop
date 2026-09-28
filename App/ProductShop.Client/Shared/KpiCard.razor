@@ -1,0 +1,38 @@
+@* KPI card: label, boro value, ager period er tulona (↑ / ↓ %) *@
+<div class="kpi">
+    <div class="kpi-head">
+        <span class="kpi-label">@Label</span>
+        <span class="kpi-icon tone-@Tone"><i class="bi @Icon"></i></span>
+    </div>
+    <div class="kpi-value">@Value</div>
+    <div class="kpi-foot">
+        @if (Kpi?.ChangePercent is decimal change)
+        {
+            var good = (change >= 0) == UpIsGood;
+            <span class="kpi-delta @(change == 0 ? "flat" : good ? "up" : "down")">
+                <i class="bi @(change > 0 ? "bi-arrow-up-right" : change < 0 ? "bi-arrow-down-right" : "bi-dash")"></i>
+                @($"{Math.Abs(change):0.#}%")
+            </span>
+        }
+        else if (Kpi != null && Kpi.Current > 0)
+        {
+            <span class="kpi-delta up"><i class="bi bi-stars"></i> New</span>
+        }
+        @if (Previous != null)
+        {
+            <span class="kpi-prev">Previous @Previous</span>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+    [Parameter] public string Icon { get; set; } = "bi-graph-up";
+    [Parameter] public string Tone { get; set; } = "primary";
+    [Parameter] public KpiValue? Kpi { get; set; }
+    [Parameter] public string? Previous { get; set; }
+
+    // Barle bhalo (sale) naki kharap
+    [Parameter] public bool UpIsGood { get; set; } = true;
+}

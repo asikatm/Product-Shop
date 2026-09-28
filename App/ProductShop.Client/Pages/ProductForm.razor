@@ -1,6 +1,6 @@
 @page "/product/add"
 @page "/product/edit/{Id:int}"
-@attribute [AdminOnly]
+@attribute [RequirePermission(Perms.ProductsAdd, Perms.ProductsEdit)]
 @inject ProductService ProductService
 @inject CatalogService CatalogService
 @inject NavigationManager Nav

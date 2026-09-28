@@ -36,6 +36,11 @@ public class SaleService
         await response.EnsureOkAsync();
     }
 
+    public async Task<DashboardStats> GetStatsAsync(string period)
+    {
+        return await _http.GetFromJsonAsync<DashboardStats>($"api/dashboard/stats?period={Uri.EscapeDataString(period)}") ?? new DashboardStats();
+    }
+
     public async Task<DashboardSummary> GetDashboardAsync()
     {
         return await _http.GetFromJsonAsync<DashboardSummary>("api/dashboard") ?? new DashboardSummary();

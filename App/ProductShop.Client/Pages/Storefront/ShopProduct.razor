@@ -1,0 +1,155 @@
+@page "/shop/product/{Id:int}"
+@layout ShopLayout
+@attribute [PublicPage]
+@inject StoreService Store
+@inject CartService Cart
+@inject NavigationManager Nav
+
+<PageTitle>@(product?.Name ?? "Product")</PageTitle>
+
+<div class="st-wrap">
+    @if (loading)
+    {
+        <div class="loading">Loading...</div>
+    }
+    else if (product == null)
+    {
+        <div class="st-empty"><i class="bi bi-emoji-frown"></i><p>পণ্যটি পাওয়া যায়নি।</p><a class="st-btn" href="shop">সব শাড়ি দেখুন</a></div>
+    }
+    else
+    {
+        <div class="st-crumb"><a href="shop">হোম</a> / @if (product.CategoryId != null) { <a href="shop/category/@product.CategoryId">@product.CategoryName</a> <span>/</span> } <span>@product.Code</span></div>
+
+        <div class="st-product">
+            <div class="st-gallery">
+                <div class="st-gallery-main">
+                    @if (product.Images.Count > 0)
+                    {
+                        <img src="@Store.ImageUrl(product.Images[image])" alt="@product.Name" />
+                    }
+                    else
+                    {
+                        <i class="bi bi-image"></i>
+                    }
+                    @if (product.DiscountPercent > 0)
+                    {
+                        <span class="st-off st-off-lg">-@product.DiscountPercent%</span>
+                    }
+                </div>
+                @if (product.Images.Count > 1)
+                {
+                    <div class="st-thumbs">
+                        @for (var i = 0; i < product.Images.Count; i++)
+                        {
+                            var idx = i;
+                            <button class="@(image == idx ? "on" : "")" @onclick="() => image = idx"><img src="@Store.ImageUrl(product.Images[idx])" alt="" /></button>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="st-info">
+                <h1>@product.Name</h1>
+                <div class="st-meta">
+                    @if (product.Code != null) { <span>কোড: <strong>@product.Code</strong></span> }
+                    @if (product.Fabric != null) { <span>ফেব্রিক: <strong>@product.Fabric</strong></span> }
+                    @if (product.BrandName != null) { <span>ব্র্যান্ড: <strong>@product.BrandName</strong></span> }
+                </div>
+
+                <div class="st-price st-price-lg">
+                    <strong>৳ @Selected!.FinalPrice.ToString("N0")</strong>
+                    @if (Selected.FinalPrice < Selected.Price)
+                    {
+                        <del>৳ @Selected.Price.ToString("N0")</del>
+                        <span class="st-save">৳ @((Selected.Price - Selected.FinalPrice).ToString("N0")) সাশ্রয়</span>
+                    }
+                </div>
+
+                @if (product.Variants.Count > 1)
+                {
+                    <div class="st-label">সাইজ / কালার বেছে নিন</div>
+                    <div class="st-variants">
+                        @foreach (var v in product.Variants)
+                        {
+                            <button class="@(Selected.Id == v.Id ? "on" : "")" @onclick="() => variantId = v.Id">@v.Label</button>
+                        }
+                    </div>
+                }
+
+                <div class="st-label">পরিমাণ</div>
+                <div class="st-qty">
+                    <button @onclick="() => qty = Math.Max(1, qty - 1)"><i class="bi bi-dash"></i></button>
+                    <span>@qty</span>
+                    <button @onclick="() => qty = Math.Min(CartService.MaxQty, qty + 1)"><i class="bi bi-plus"></i></button>
+                </div>
+
+                <div class="st-actions">
+                    <button class="st-btn st-btn-lg" @onclick="() => AddAsync(true)"><i class="bi bi-lightning-charge-fill me-1"></i>এখনই অর্ডার করুন</button>
+                    <button class="st-btn-outline st-btn-lg" @onclick="() => AddAsync(false)"><i class="bi bi-bag-plus me-1"></i>কার্টে রাখুন</button>
+                </div>
+                @if (added)
+                {
+                    <div class="st-added"><i class="bi bi-check-circle-fill"></i> কার্টে যোগ হয়েছে · <a href="shop/checkout">অর্ডার করতে যান</a></div>
+                }
+
+                <ul class="st-perks">
+                    <li><i class="bi bi-cash-coin"></i> ক্যাশ অন ডেলিভারি — পণ্য হাতে পেয়ে টাকা দিন</li>
+                    <li><i class="bi bi-truck"></i> সারা দেশে হোম ডেলিভারি</li>
+                    <li><i class="bi bi-telephone"></i> অর্ডারের পর আমরা ফোনে কনফার্ম করব</li>
+                </ul>
+
+                @if (!string.IsNullOrWhiteSpace(product.Description))
+                {
+                    <div class="st-desc">
+                        <div class="st-label">বিবরণ</div>
+                        <p>@product.Description</p>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private StoreProduct? product;
+    private bool loading = true;
+    private int image;
+    private int variantId;
+    private int qty = 1;
+    private bool added;
+
+    private StoreVariant? Selected => product?.Variants.FirstOrDefault(v => v.Id == variantId) ?? product?.Variants.FirstOrDefault();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        image = 0;
+        qty = 1;
+        added = false;
+        try
+        {
+            product = await Store.GetProductAsync(Id);
+            variantId = product?.Variants.FirstOrDefault()?.Id ?? 0;
+        }
+        catch (Exception)
+        {
+            product = null;
+        }
+        loading = false;
+    }
+
+    private async Task AddAsync(bool checkout)
+    {
+        var v = Selected!;
+        await Cart.AddAsync(new CartLine
+        {
+            VariantId = v.Id, ProductId = product!.Id, Name = product.Name, VariantLabel = v.Label,
+            Image = product.Images.FirstOrDefault(), UnitPrice = v.FinalPrice, Quantity = qty
+        });
+
+        if (checkout) Nav.NavigateTo("shop/checkout");
+        else added = true;
+    }
+}

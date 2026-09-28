@@ -1,0 +1,71 @@
+@page "/shop/order/{OrderNo}"
+@layout ShopLayout
+@attribute [PublicPage]
+@inject StoreService Store
+
+<PageTitle>অর্ডার @OrderNo</PageTitle>
+
+<div class="st-wrap">
+    <div class="st-done">
+        @if (loading)
+        {
+            <div class="loading">Loading...</div>
+        }
+        else if (order == null)
+        {
+            <i class="bi bi-search st-done-icon text-muted"></i>
+            <h1>অর্ডার পাওয়া যায়নি</h1>
+            <p>অর্ডার নাম্বার ও মোবাইল নাম্বার মিলিয়ে দেখুন।</p>
+            <a class="st-btn" href="shop">শপে ফিরে যান</a>
+        }
+        else
+        {
+            <div class="st-done-icon"><i class="bi bi-check-lg"></i></div>
+            <h1>ধন্যবাদ, @order.CustomerName!</h1>
+            <p>আপনার অর্ডারটি গ্রহণ করা হয়েছে। খুব শীঘ্রই আমরা ফোন করে কনফার্ম করব।</p>
+
+            <div class="st-done-card">
+                <div class="st-done-row"><span>অর্ডার নাম্বার</span><strong>@order.OrderNo</strong></div>
+                <div class="st-done-row"><span>অবস্থা</span><span class="st-status st-status-@order.Status.ToLower()">@StatusText(order.Status)</span></div>
+                @foreach (var i in order.Items)
+                {
+                    <div class="st-done-row st-done-item"><span>@i.ProductName × @i.Quantity</span><span>৳ @i.Total.ToString("N0")</span></div>
+                }
+                <div class="st-done-row st-done-total"><span>মোট (ক্যাশ অন ডেলিভারি)</span><strong>৳ @order.Total.ToString("N0")</strong></div>
+            </div>
+
+            <a class="st-btn mt-3" href="shop"><i class="bi bi-bag me-1"></i>আরো শপিং করুন</a>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string OrderNo { get; set; } = string.Empty;
+    [SupplyParameterFromQuery(Name = "phone")] public string? Phone { get; set; }
+
+    private OrderTrack? order;
+    private bool loading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        try
+        {
+            order = string.IsNullOrWhiteSpace(Phone) ? null : await Store.TrackAsync(OrderNo, Phone);
+        }
+        catch (Exception)
+        {
+            order = null;
+        }
+        loading = false;
+    }
+
+    private static string StatusText(string status) => status switch
+    {
+        WebOrderStatus.Pending => "অপেক্ষমাণ (কনফার্মের জন্য)",
+        WebOrderStatus.Confirmed => "কনফার্ম হয়েছে",
+        WebOrderStatus.Delivered => "ডেলিভারি হয়েছে",
+        WebOrderStatus.Cancelled => "বাতিল",
+        _ => status
+    };
+}

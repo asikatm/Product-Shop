@@ -2,12 +2,11 @@ using System.ComponentModel.DataAnnotations;
 
 namespace ProductShop.Shared;
 
+// Database e thaka default role er naam. Admin system role - shob permission.
 public static class Roles
 {
     public const string Admin = "Admin";
     public const string Salesman = "Salesman";
-
-    public static readonly string[] All = { Admin, Salesman };
 }
 
 public class LoginRequest
@@ -24,6 +23,18 @@ public class LoginResponse
     public string Token { get; set; } = string.Empty;
     public DateTime ExpiresAt { get; set; }
     public UserInfo User { get; set; } = new();
+
+    // "products.view" er moto; super admin hole shob
+    public List<string> Permissions { get; set; } = new();
+    public bool IsSuperAdmin { get; set; }
+}
+
+// Login kora user er ekhonkar role / permission (api/auth/me)
+public class CurrentUser
+{
+    public UserInfo User { get; set; } = new();
+    public List<string> Permissions { get; set; } = new();
+    public bool IsSuperAdmin { get; set; }
 }
 
 public class UserInfo
@@ -33,7 +44,10 @@ public class UserInfo
     public string FullName { get; set; } = string.Empty;
     public string? Email { get; set; }
     public string? Phone { get; set; }
-    public string Role { get; set; } = Roles.Salesman;
+
+    // Ek user er ekadhik role thakte pare
+    public List<string> Roles { get; set; } = new();
+    public List<int> RoleIds { get; set; } = new();
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
@@ -89,7 +103,7 @@ public class UserSaveRequest
     [StringLength(20)]
     public string? Phone { get; set; }
 
-    public string Role { get; set; } = Roles.Salesman;
+    public List<int> RoleIds { get; set; } = new();
 
     public bool IsActive { get; set; } = true;
 

@@ -1,0 +1,140 @@
+@* Somoy onujayi bikri - column chart (ek series, tai legend nai; title bole ki). Hover e tooltip. *@
+
+<div class="viz">
+    <div class="viz-toggle" role="group" aria-label="View">
+        <button class="@(table ? "" : "on")" @onclick="() => table = false">Chart</button>
+        <button class="@(table ? "on" : "")" @onclick="() => table = true">Table</button>
+    </div>
+
+    @if (Points.Count == 0 || Points.All(p => p.Revenue == 0))
+    {
+        <div class="viz-empty"><i class="bi bi-bar-chart-line"></i><span>Ei shomoye kono data nai</span></div>
+    }
+    else if (table)
+    {
+        <div class="viz-table-scroll">
+            <table class="table table-sm mb-0 viz-table">
+                <thead><tr><th>@(Points.Count > 0 && Points[0].Label.Contains("M") ? "Time" : "Date")</th><th class="text-end">Orders</th><th class="text-end">Revenue</th></tr></thead>
+                <tbody>
+                    @foreach (var p in Points)
+                    {
+                        <tr><td>@p.Label</td><td class="text-end">@p.Orders</td><td class="text-end">@Format(p.Revenue)</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="trend" @onmouseleave="() => hover = null">
+            <svg viewBox="0 0 @W @H" class="trend-svg" role="img" aria-label="@AriaLabel" preserveAspectRatio="none">
+                @* Grid + y ticks *@
+                @foreach (var t in Ticks)
+                {
+                    var y = Y(t);
+                    <line x1="@Left" x2="@W" y1="@F(y)" y2="@F(y)" stroke="@(t == 0 ? ChartColors.Axis : ChartColors.Grid)" stroke-width="1" vector-effect="non-scaling-stroke" />
+                }
+
+                @for (var i = 0; i < Points.Count; i++)
+                {
+                    var idx = i;
+                    var p = Points[i];
+                    var cx = Left + Slot * (i + 0.5);
+                    var top = Y((double)p.Revenue);
+                    var h = Base - top;
+                    <rect x="@F(Left + Slot * i)" y="0" width="@F(Slot)" height="@Base" fill="@(hover == idx ? "rgba(42,120,214,0.06)" : "transparent")"
+                          @onmouseenter="() => hover = idx" />
+                    @if (h > 0.5)
+                    {
+                        <path d="@BarPath(cx, top, h)" fill="@ChartColors.Revenue" opacity="@(hover == null || hover == idx ? 1 : 0.55)" pointer-events="none" />
+                    }
+                }
+            </svg>
+
+            @* Y tick label (HTML e, jate svg stretch e text bake na hoy) *@
+            @foreach (var t in Ticks)
+            {
+                <div class="trend-tick" style="top:@Pct(Y(t), H)">@Compact(t)</div>
+            }
+
+            <div class="trend-xlabels" style="left:@Pct(Left, W)">
+                @for (var i = 0; i < Points.Count; i++)
+                {
+                    <span style="width:@Pct(Slot, W - Left)">@(i % LabelStep == 0 ? Points[i].Label : "")</span>
+                }
+            </div>
+
+            @if (hover is int hv && hv < Points.Count)
+            {
+                var p = Points[hv];
+                <div class="trend-tip" style="left:@Pct(Left + Slot * (hv + 0.5), W)">
+                    <div class="fw-semibold">@p.Label</div>
+                    <div><span class="viz-swatch" style="background:@ChartColors.Revenue"></span> Revenue <strong>@Format(p.Revenue)</strong></div>
+                    <div class="text-muted">@p.Orders ta order</div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<TrendPoint> Points { get; set; } = new();
+    [Parameter] public Func<decimal, string>? ValueFormat { get; set; }
+    [Parameter] public string AriaLabel { get; set; } = "Revenue trend";
+
+    private const double W = 700;
+    private const double H = 240;
+    private const double Left = 46;     // y label er jayga
+    private const double Base = 214;    // baseline (niche x label)
+    private const double TopPad = 12;
+
+    private bool table;
+    private int? hover;
+
+    private double Slot => (W - Left) / Math.Max(1, Points.Count);
+
+    // Bar <= 24px, slot er 60%
+    // viewBox 700 wide chart shadharonoto ~1.4x stretch hoy, tai 16 unit ~ 22-24px
+    private double BarW => Math.Min(16, Slot * 0.6);
+
+    private int LabelStep => Points.Count <= 7 ? 1 : (int)Math.Ceiling(Points.Count / 6.0);
+
+    private double NiceMax
+    {
+        get
+        {
+            var max = (double)(Points.Count == 0 ? 0 : Points.Max(p => p.Revenue));
+            if (max <= 0) return 100;
+            var mag = Math.Pow(10, Math.Floor(Math.Log10(max)));
+            foreach (var m in new[] { 1, 2, 2.5, 5, 10 })
+                if (m * mag >= max) return m * mag;
+            return 10 * mag;
+        }
+    }
+
+    private IEnumerable<double> Ticks => Enumerable.Range(0, 5).Select(i => NiceMax / 4 * i);
+
+    private double Y(double v) => Base - (Base - TopPad) * (v / NiceMax);
+
+    // Upore 4px round, baseline e square
+    private string BarPath(double cx, double top, double h)
+    {
+        var x = cx - BarW / 2;
+        var r = Math.Min(4, Math.Min(BarW / 2, h));
+        return $"M{F(x)},{F(Base)} V{F(top + r)} Q{F(x)},{F(top)} {F(x + r)},{F(top)} H{F(x + BarW - r)} Q{F(x + BarW)},{F(top)} {F(x + BarW)},{F(top + r)} V{F(Base)} Z";
+    }
+
+    private static string F(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string Pct(double v, double of) => (v / of * 100).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "%";
+
+    private static string Compact(double v) => v switch
+    {
+        >= 10_000_000 => $"{v / 10_000_000:0.#}Cr",
+        >= 100_000 => $"{v / 100_000:0.#}L",
+        >= 1_000 => $"{v / 1_000:0.#}K",
+        _ => v.ToString("0")
+    };
+
+    private string Format(decimal value) => ValueFormat?.Invoke(value) ?? value.ToString("N0");
+}

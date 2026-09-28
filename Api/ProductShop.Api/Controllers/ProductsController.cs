@@ -39,7 +39,7 @@ public class ProductsController : ControllerBase
     public async Task<ActionResult<List<Product>>> GetAll()
     {
         var products = await WithDetails.OrderBy(p => p.Name).ToListAsync();
-        HideCost(products);
+        await HideCostAsync(products);
         return products;
     }
 
@@ -49,14 +49,14 @@ public class ProductsController : ControllerBase
     {
         var product = await WithDetails.FirstOrDefaultAsync(p => p.Id == id);
         if (product == null) return NotFound();
-        HideCost(new[] { product });
+        await HideCostAsync(new[] { product });
         return product;
     }
 
     // Kena dam shudhu admin dekhbe
-    private void HideCost(IEnumerable<Product> products)
+    private async Task HideCostAsync(IEnumerable<Product> products)
     {
-        if (User.IsInRole(Roles.Admin)) return;
+        if (await HttpContext.RequestServices.GetRequiredService<PermissionService>().HasAsync(User, Perms.CostView)) return;
         foreach (var p in products)
         {
             p.PurchasePrice = 0;
@@ -68,7 +68,7 @@ public class ProductsController : ControllerBase
     // POST: api/products/images
     // Chobi save kore relative url ferot dey, product save er shomoy url ta pathate hoy
     [HttpPost("images")]
-    [Authorize(Roles = Roles.Admin)]
+    [Permission(Perms.ProductsAdd, Perms.ProductsEdit)]
     [RequestSizeLimit(MaxImageBytes + 64 * 1024)]
     public async Task<ActionResult<ProductImage>> UploadImage(IFormFile file)
     {
@@ -99,7 +99,7 @@ public class ProductsController : ControllerBase
     // POST: api/products
     // Variant er Quantity ekhane opening stock hisebe dhora hoy
     [HttpPost]
-    [Authorize(Roles = Roles.Admin)]
+    [Permission(Perms.ProductsAdd)]
     public async Task<ActionResult<Product>> Create(Product product)
     {
         Normalize(product);
@@ -138,7 +138,7 @@ public class ProductsController : ControllerBase
     // Purono variant er stock ekhane change hoy na, Stock In / Sale diye hoy.
     // Notun variant er Quantity opening stock.
     [HttpPut("{id:int}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Permission(Perms.ProductsEdit)]
     public async Task<IActionResult> Update(int id, Product product)
     {
         if (id != product.Id) return BadRequest("Id mismatch");
@@ -163,7 +163,8 @@ public class ProductsController : ControllerBase
         {
             var removedIds = removed.Select(v => v.Id).ToList();
             var usedId = await _db.SaleItems.Where(i => removedIds.Contains(i.ProductVariantId)).Select(i => (int?)i.ProductVariantId).FirstOrDefaultAsync()
-                      ?? await _db.StockEntryItems.Where(i => removedIds.Contains(i.ProductVariantId)).Select(i => (int?)i.ProductVariantId).FirstOrDefaultAsync();
+                      ?? await _db.StockEntryItems.Where(i => removedIds.Contains(i.ProductVariantId)).Select(i => (int?)i.ProductVariantId).FirstOrDefaultAsync()
+                      ?? await _db.WebOrderItems.Where(i => removedIds.Contains(i.ProductVariantId)).Select(i => (int?)i.ProductVariantId).FirstOrDefaultAsync();
             if (usedId != null)
                 return BadRequest($"'{removed.First(v => v.Id == usedId).Label}' er sale ba stock entry ache, tai remove kora jabe na.");
         }
@@ -225,14 +226,15 @@ public class ProductsController : ControllerBase
 
     // DELETE: api/products/5
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Permission(Perms.ProductsDelete)]
     public async Task<IActionResult> Delete(int id)
     {
         var product = await _db.Products.Include(p => p.Images).FirstOrDefaultAsync(p => p.Id == id);
         if (product == null) return NotFound();
 
         var used = await _db.SaleItems.AnyAsync(i => i.ProductId == id)
-                || await _db.StockEntryItems.AnyAsync(i => i.ProductId == id);
+                || await _db.StockEntryItems.AnyAsync(i => i.ProductId == id)
+                || await _db.WebOrderItems.AnyAsync(i => i.ProductId == id);
         if (used)
             return BadRequest($"'{product.Name}' er stock entry ba sale ache, tai delete kora jabe na.");
 

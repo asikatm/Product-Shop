@@ -2,13 +2,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductShop.Api.Data;
+using ProductShop.Api.Services;
 using ProductShop.Shared;
 
 namespace ProductShop.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = Roles.Admin)]
+[Permission(Perms.StockView)]
 public class StockEntriesController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -50,6 +51,7 @@ public class StockEntriesController : ControllerBase
     // POST: api/stockentries
     // Save hole size/color er stock bare ar purchase price last cost e update hoy
     [HttpPost]
+    [Permission(Perms.StockAdd)]
     public async Task<ActionResult<StockEntry>> Create(StockEntry entry)
     {
         if (entry.Items.Count == 0)
@@ -94,6 +96,7 @@ public class StockEntriesController : ControllerBase
     // DELETE: api/stockentries/5
     // Delete hole stock abar kome jay
     [HttpDelete("{id:int}")]
+    [Permission(Perms.StockDelete)]
     public async Task<IActionResult> Delete(int id)
     {
         var entry = await _db.StockEntries.Include(s => s.Items).FirstOrDefaultAsync(s => s.Id == id);

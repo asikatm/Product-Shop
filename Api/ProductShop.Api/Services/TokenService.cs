@@ -29,8 +29,9 @@ public class TokenService
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Name, user.Username),
-                new Claim(ClaimTypes.GivenName, user.FullName),
-                new Claim(ClaimTypes.Role, user.Role)
+                // Role / permission token e rakha hoy na - protiti request e DB (cache) theke dekha hoy,
+                // tai admin permission bodlale sathe sathe kaaj kore
+                new Claim(ClaimTypes.GivenName, user.FullName)
             }),
             Expires = expires,
             Issuer = _config["Jwt:Issuer"],

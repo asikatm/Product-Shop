@@ -1,5 +1,5 @@
 @page "/stock/new"
-@attribute [AdminOnly]
+@attribute [RequirePermission(Perms.StockAdd)]
 @inject ProductService ProductService
 @inject StockService StockService
 @inject NavigationManager Nav

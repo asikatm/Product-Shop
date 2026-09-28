@@ -1,4 +1,5 @@
-@page "/sales"
+@page "/sales"
+@attribute [RequirePermission(Perms.SalesView)]
 @inject SaleService SaleService
 @inject AuthState Auth
 @inject IJSRuntime JS
@@ -7,7 +8,7 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0">Sales</h1>
-    <a class="btn btn-success" href="sales/new">+ New Sale</a>
+    @if (Auth.Can(Perms.SalesAdd)) { <a class="btn btn-success" href="sales/new">+ New Sale</a> }
 </div>
 
 <div class="card mb-3">
@@ -91,7 +92,7 @@ else
                             <td class="small">@s.SoldBy</td>
                             <td class="text-end text-nowrap">
                                 <a class="btn btn-sm btn-outline-secondary" href="sales/@s.Id">Invoice</a>
-                                @if (Auth.IsAdmin)
+                                @if (Auth.Can(Perms.SalesDelete))
                                 {
                                     <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(s)">Delete</button>
                                 }

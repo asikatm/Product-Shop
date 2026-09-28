@@ -2,41 +2,87 @@
 @implements IDisposable
 @inject AuthState Auth
 @inject AuthService AuthService
+@inject SaleService SaleService
 @inject NavigationManager Nav
 @inject IConfiguration Config
+@inject IJSRuntime JS
 
-<div class="app-shell @(menuOpen ? "menu-open" : "")">
+<div class="app-shell @(menuOpen ? "menu-open" : "") @(collapsed ? "collapsed" : "")">
     <aside class="app-sidebar no-print">
-        <a class="app-brand" href="">
-            <span class="app-brand-logo"><i class="bi bi-bag-heart"></i></span>
-            <span>
-                <span class="app-brand-name d-block">@ShopName</span>
-                <span class="app-brand-sub">Sales &amp; inventory</span>
-            </span>
-        </a>
+        @* ---------- Workspace card ---------- *@
+        <div class="side-top">
+            <a class="workspace" href="" title="@ShopName">
+                <span class="workspace-logo">@ShopName[..1].ToUpperInvariant()</span>
+                <span class="workspace-name side-text">@ShopName</span>
+                <i class="bi bi-chevron-expand side-text text-muted"></i>
+            </a>
+            <button class="side-collapse d-none d-lg-flex" title="@(collapsed ? "Menu boro korun" : "Menu chhoto korun")" @onclick="() => collapsed = !collapsed">
+                <i class="bi @(collapsed ? "bi-layout-sidebar-inset" : "bi-layout-sidebar")"></i>
+            </button>
+        </div>
 
-        <nav class="app-nav">
-            <div class="app-nav-section">Main</div>
-            <NavLink class="app-nav-link" href="" Match="NavLinkMatch.All"><i class="bi bi-grid-1x2"></i> Dashboard</NavLink>
-            <NavLink class="app-nav-link" href="sales/new"><i class="bi bi-cart-plus"></i> New Sale</NavLink>
-            <NavLink class="app-nav-link" href="sales" Match="NavLinkMatch.All"><i class="bi bi-receipt"></i> Sales</NavLink>
-            <NavLink class="app-nav-link" href="customers"><i class="bi bi-people"></i> Customers</NavLink>
-
-            <div class="app-nav-section">Inventory</div>
-            <NavLink class="app-nav-link" href="products"><i class="bi bi-box-seam"></i> Products</NavLink>
-            @if (Auth.IsAdmin)
+        @* ---------- Quick search (Ctrl + K) ---------- *@
+        <div class="quick-search side-text-block">
+            <i class="bi bi-search"></i>
+            <input id="quick-search" placeholder="Quick Search" autocomplete="off"
+                   @bind="query" @bind:event="oninput" @onkeydown="OnSearchKey" @onfocus="() => searchOpen = true" />
+            <kbd>CTRL K</kbd>
+            @if (searchOpen && query.Length > 0)
             {
-                <NavLink class="app-nav-link" href="product/add"><i class="bi bi-plus-square"></i> Add Product</NavLink>
-                <NavLink class="app-nav-link" href="stock"><i class="bi bi-truck"></i> Stock In</NavLink>
-                <NavLink class="app-nav-link" href="catalog"><i class="bi bi-tags"></i> Category / Brand</NavLink>
-
-                <div class="app-nav-section">Settings</div>
-                <NavLink class="app-nav-link" href="users"><i class="bi bi-person-gear"></i> Users</NavLink>
+                <div class="app-click-away" @onclick="CloseSearch"></div>
+                <div class="quick-results">
+                    @if (SearchResults.Count == 0)
+                    {
+                        <div class="quick-empty">Kichu pawa jay nai</div>
+                    }
+                    @foreach (var r in SearchResults)
+                    {
+                        <a href="@r.Href" @onclick="CloseSearch"><i class="bi @r.Icon"></i> @r.Title <span class="quick-group">@r.Group</span></a>
+                    }
+                </div>
             }
-            <NavLink class="app-nav-link" href="account"><i class="bi bi-shield-lock"></i> My Account</NavLink>
+        </div>
+
+        @* ---------- Menu ---------- *@
+        <nav class="app-nav">
+            @foreach (var section in Visible)
+            {
+                <div class="app-nav-section side-text">@section.Title</div>
+                @foreach (var item in section.Items)
+                {
+                    if (item.Children.Count == 0)
+                    {
+                        <NavLink class="app-nav-link" href="@item.Href" Match="NavLinkMatch.All" title="@item.Title">
+                            <i class="bi @item.Icon ic-@item.Tone"></i><span class="side-text">@item.Title</span>
+                        </NavLink>
+                    }
+                    else
+                    {
+                        var open = openGroups.Contains(item.Title);
+                        <button class="app-nav-link app-nav-group @(open ? "open" : "") @(IsActiveGroup(item) ? "has-active" : "")" title="@item.Title"
+                                @onclick="() => ToggleGroup(item.Title)">
+                            <i class="bi @item.Icon ic-@item.Tone"></i><span class="side-text me-auto">@item.Title</span>
+                            <i class="bi bi-chevron-right app-nav-chevron side-text"></i>
+                        </button>
+                        @if (open && !collapsed)
+                        {
+                            <div class="app-nav-children">
+                                @foreach (var child in item.Children)
+                                {
+                                    <NavLink class="app-nav-child" href="@child.Href" Match="NavLinkMatch.All">@child.Title</NavLink>
+                                }
+                            </div>
+                        }
+                    }
+                }
+            }
         </nav>
 
-        <div class="app-sidebar-foot">© @DateTime.Today.Year @ShopName</div>
+        @* ---------- Niche user / role card ---------- *@
+        <div class="side-plan side-text-block">
+            <span class="plan-badge">@(Auth.IsSuperAdmin ? "ADMIN" : Auth.RoleText.ToUpperInvariant())</span>
+            <span class="plan-user">@@@Auth.User?.Username</span>
+        </div>
     </aside>
 
     <div class="app-backdrop" @onclick="() => menuOpen = false"></div>
@@ -44,17 +90,75 @@
     <div class="app-main">
         <header class="app-topbar no-print">
             <button class="app-icon-btn d-lg-none" title="Menu" @onclick="() => menuOpen = !menuOpen"><i class="bi bi-list"></i></button>
-            <div class="app-topbar-date d-none d-sm-block"><i class="bi bi-calendar3 me-1"></i> @DateTime.Today.ToString("dddd, dd MMMM yyyy")</div>
+
+            @* Druto kaaj er link *@
+            <nav class="top-links d-none d-md-flex">
+                <button @onclick="FocusSearchAsync"><i class="bi bi-search"></i> Search</button>
+                <a href="shop" target="_blank"><i class="bi bi-shop-window"></i> Website</a>
+                @if (Auth.Can(Perms.SalesAdd))
+                {
+                    <a href="sales/new"><i class="bi bi-cart-plus"></i> New Sale</a>
+                }
+                @if (Auth.Can(Perms.SalesView))
+                {
+                    <a href="sales"><i class="bi bi-list-ul"></i> Sales List</a>
+                }
+                @if (Auth.Can(Perms.CustomersView))
+                {
+                    <a href="customers"><i class="bi bi-people"></i> Customers</a>
+                }
+                @if (Auth.Can(Perms.StockAdd))
+                {
+                    <a href="stock/new"><i class="bi bi-truck"></i> Stock In</a>
+                }
+            </nav>
 
             <div class="ms-auto d-flex align-items-center gap-2">
-                <a class="btn btn-primary btn-sm px-3" href="sales/new"><i class="bi bi-plus-lg me-1"></i><span class="d-none d-sm-inline">New Sale</span></a>
+                @if (Auth.Can(Perms.SalesAdd))
+                {
+                    <a class="btn btn-primary btn-sm px-3 d-md-none" href="sales/new"><i class="bi bi-plus-lg"></i></a>
+                }
+
+                @* Notification: low stock, approve baki user *@
+                <div class="app-user">
+                    <button class="top-icon" title="Notification" @onclick="() => notifyOpen = !notifyOpen">
+                        <i class="bi bi-bell"></i>
+                        @if (NotifyCount > 0)
+                        {
+                            <span class="top-badge">@NotifyCount</span>
+                        }
+                    </button>
+                    @if (notifyOpen)
+                    {
+                        <div class="app-click-away" @onclick="() => notifyOpen = false"></div>
+                        <div class="app-menu" style="min-width:260px">
+                            <div class="px-2 py-1 mb-1 border-bottom fw-semibold small">Notification</div>
+                            @if (NotifyCount == 0)
+                            {
+                                <div class="px-2 py-2 small text-muted">Notun kichu nai ✓</div>
+                            }
+                            @if (pendingWebOrders > 0)
+                            {
+                                <a href="web-orders" @onclick="() => notifyOpen = false"><i class="bi bi-globe2 text-success"></i> @pendingWebOrders ta notun web order</a>
+                            }
+                            @if (lowStock > 0)
+                            {
+                                <a href="products" @onclick="() => notifyOpen = false"><i class="bi bi-exclamation-triangle text-warning"></i> @lowStock ta size/color er stock kom</a>
+                            }
+                            @if (pendingUsers > 0)
+                            {
+                                <a href="users" @onclick="() => notifyOpen = false"><i class="bi bi-person-exclamation text-primary"></i> @pendingUsers jon user approve er opekkhay</a>
+                            }
+                        </div>
+                    }
+                </div>
 
                 <div class="app-user">
                     <button class="app-user-btn" @onclick="() => userMenuOpen = !userMenuOpen">
                         <span class="app-avatar">@Initials</span>
                         <span class="d-none d-md-block">
                             <span class="app-user-name d-block">@Auth.User?.FullName</span>
-                            <span class="app-user-role d-block">@Auth.User?.Role</span>
+                            <span class="app-user-role d-block">@Auth.RoleText</span>
                         </span>
                         <i class="bi bi-chevron-down small text-muted d-none d-md-block"></i>
                     </button>
@@ -82,10 +186,93 @@
 </div>
 
 @code {
+    private record NavItem(string Title, string Icon, string Href, string[] Perms, List<NavItem> Children, string Group = "", string Tone = "primary");
+    private record NavSection(string Title, List<NavItem> Items);
+
     private bool menuOpen;
     private bool userMenuOpen;
+    private bool notifyOpen;
+    private bool collapsed;
+    private bool searchOpen;
+    private string query = string.Empty;
+    private readonly HashSet<string> openGroups = new();
+    private int lowStock;
+    private int pendingUsers;
+    private int pendingWebOrders;
 
-    private string ShopName => Config["Shop:Name"] ?? "Garments Showroom";
+    private int NotifyCount => lowStock + pendingUsers + pendingWebOrders;
+
+    private string ShopName => string.IsNullOrWhiteSpace(Config["Shop:Name"]) ? "Garments Showroom" : Config["Shop:Name"]!;
+
+    private static NavItem Link(string title, string icon, string href, string tone, params string[] perms) => new(title, icon, href, perms, new(), Tone: tone);
+
+    private static NavItem Group(string title, string icon, string tone, params NavItem[] children) => new(title, icon, "", Array.Empty<string>(), children.ToList(), Tone: tone);
+
+    // Puro menu - permission onujayi Visible e filter hoy
+    private static readonly NavSection[] Menu =
+    {
+        new("OPERATIONS", new()
+        {
+            Link("Dashboard", "bi-grid-1x2", "", "primary", Perms.DashboardView),
+            Link("Web Orders", "bi-globe2", "web-orders", "orange", Perms.WebOrdersView),
+            Group("Sales", "bi-receipt", "success",
+                Link("New Sale", "bi-cart-plus", "sales/new", "success", Perms.SalesAdd),
+                Link("Sales List", "bi-list-ul", "sales", "success", Perms.SalesView)),
+            Group("Customers", "bi-people", "pink",
+                Link("Customer List", "bi-people", "customers", "pink", Perms.CustomersView),
+                Link("Add Customer", "bi-person-plus", "customers/new", "pink", Perms.CustomersAdd))
+        }),
+        new("INVENTORY", new()
+        {
+            Group("Products", "bi-box-seam", "info",
+                Link("Product List", "bi-box-seam", "products", "info", Perms.ProductsView),
+                Link("Add Product", "bi-plus-square", "product/add", "info", Perms.ProductsAdd)),
+            Group("Stock In", "bi-truck", "orange",
+                Link("Stock Entries", "bi-truck", "stock", "orange", Perms.StockView),
+                Link("New Stock Entry", "bi-plus-circle", "stock/new", "orange", Perms.StockAdd)),
+            Link("Category / Brand", "bi-tags", "catalog", "purple", Perms.CatalogView)
+        }),
+        new("ADMINISTRATIVE", new()
+        {
+            Group("User Management", "bi-shield-lock", "teal",
+                Link("Users", "bi-person-gear", "users", "teal", Perms.UsersView),
+                Link("Roles", "bi-person-badge", "roles", "danger", Perms.RolesView),
+                Link("Menu Permission", "bi-ui-checks-grid", "menu-permission", "danger", Perms.RolesView))
+        }),
+        new("ACCOUNT", new()
+        {
+            Link("My Account", "bi-person-circle", "account", "warning")
+        })
+    };
+
+    // Permission nai emon menu / child bad, khali group o bad
+    private List<NavSection> Visible => Menu
+        .Select(s => new NavSection(s.Title, s.Items.Select(Allowed).OfType<NavItem>().ToList()))
+        .Where(s => s.Items.Count > 0)
+        .ToList();
+
+    private NavItem? Allowed(NavItem item)
+    {
+        if (item.Children.Count == 0)
+            return item.Perms.Length == 0 || Auth.Can(item.Perms) ? item : null;
+
+        var children = item.Children.Where(c => c.Perms.Length == 0 || Auth.Can(c.Perms)).ToList();
+        return children.Count == 0 ? null : item with { Children = children };
+    }
+
+    private List<NavItem> SearchResults => Visible
+        .SelectMany(s => s.Items.SelectMany(i => i.Children.Count > 0
+            ? i.Children.Select(c => c with { Group = i.Title })
+            : new[] { i with { Group = s.Title } }))
+        .Where(i => i.Title.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase)
+                 || i.Group.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase))
+        .Take(8)
+        .ToList();
+
+    private string CurrentPath => Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0];
+
+    private bool IsActiveGroup(NavItem group) =>
+        group.Children.Any(c => c.Href == CurrentPath || (c.Href.Length > 0 && CurrentPath.StartsWith(c.Href + "/")));
 
     private string Initials
     {
@@ -101,14 +288,73 @@
         }
     }
 
-    protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
+    protected override async Task OnInitializedAsync()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        OpenActiveGroup();
+        await LoadNotificationsAsync();
+    }
 
-    // Onno page e gele mobile menu ar user menu bondho hoye jay
+    private void ToggleGroup(string title)
+    {
+        if (collapsed) collapsed = false;
+        if (!openGroups.Remove(title)) openGroups.Add(title);
+    }
+
+    // Je page e achen tar group khola thake
+    private void OpenActiveGroup()
+    {
+        foreach (var g in Visible.SelectMany(s => s.Items).Where(IsActiveGroup))
+            openGroups.Add(g.Title);
+    }
+
+    private async Task LoadNotificationsAsync()
+    {
+        if (!Auth.Can(Perms.DashboardView)) return;
+        try
+        {
+            var stats = await SaleService.GetStatsAsync(StatsPeriod.Today);
+            lowStock = stats.LowStockCount;
+            pendingUsers = stats.PendingUsers;
+            pendingWebOrders = stats.PendingWebOrders;
+        }
+        catch (Exception)
+        {
+            // Notification na ashle kono shomossa nai
+        }
+    }
+
+    private void OnSearchKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") CloseSearch();
+        if (e.Key == "Enter" && SearchResults.Count > 0)
+        {
+            var target = SearchResults[0].Href;
+            CloseSearch();
+            Nav.NavigateTo(target);
+        }
+    }
+
+    private void CloseSearch()
+    {
+        searchOpen = false;
+        query = string.Empty;
+    }
+
+    private async Task FocusSearchAsync()
+    {
+        collapsed = false;
+        await JS.InvokeVoidAsync("appFocus", "quick-search");
+    }
+
+    // Onno page e gele menu gulo bondho, notification refresh
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
         menuOpen = false;
         userMenuOpen = false;
-        StateHasChanged();
+        notifyOpen = false;
+        OpenActiveGroup();
+        _ = InvokeAsync(async () => { await LoadNotificationsAsync(); StateHasChanged(); });
     }
 
     private async Task LogoutAsync()

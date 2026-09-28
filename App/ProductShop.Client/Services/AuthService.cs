@@ -32,14 +32,36 @@ public class AuthService
             if (string.IsNullOrEmpty(json)) return;
 
             var saved = JsonSerializer.Deserialize<LoginResponse>(json, JsonOptions);
-            if (saved != null && saved.ExpiresAt > DateTime.UtcNow)
-                _state.Set(saved);
-            else
+            if (saved == null || saved.ExpiresAt <= DateTime.UtcNow)
+            {
                 await _js.InvokeVoidAsync("localStorage.removeItem", StorageKey);
+                return;
+            }
+
+            _state.Set(saved);
+            await RefreshAsync();
         }
         catch (JsonException)
         {
             await _js.InvokeVoidAsync("localStorage.removeItem", StorageKey);
+        }
+    }
+
+    // Admin role / permission bodlale page reload e notun permission ashe.
+    // User inactive / delete hole server 401 dey, AuthHandler logout kore.
+    public async Task RefreshAsync()
+    {
+        try
+        {
+            var current = await _http.GetFromJsonAsync<CurrentUser>("api/auth/me");
+            if (current == null) return;
+
+            _state.Update(current);
+            await _js.InvokeVoidAsync("localStorage.setItem", StorageKey, JsonSerializer.Serialize(_state.Login, JsonOptions));
+        }
+        catch (HttpRequestException)
+        {
+            // API bondho thakle purono permission diye cholbe; 401 hole AuthHandler already logout koreche
         }
     }
 

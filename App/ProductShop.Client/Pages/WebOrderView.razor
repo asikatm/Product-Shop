@@ -1,0 +1,202 @@
+@page "/web-orders/{Id:int}"
+@attribute [RequirePermission(Perms.WebOrdersView)]
+@inject WebOrderService Orders
+@inject AuthState Auth
+@inject IJSRuntime JS
+
+<PageTitle>@(order?.OrderNo ?? "Web Order")</PageTitle>
+
+<div class="mb-3"><a href="web-orders">&larr; Web Orders</a></div>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger d-flex gap-2"><i class="bi bi-exclamation-triangle-fill"></i><span>@error</span></div>
+}
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-success d-flex gap-2"><i class="bi bi-check-circle-fill"></i><span>@message</span></div>
+}
+
+@if (order == null)
+{
+    @if (string.IsNullOrEmpty(error))
+    {
+        <div class="loading">Loading...</div>
+    }
+}
+else
+{
+    <div class="page-head">
+        <div>
+            <h1 class="h3 d-flex align-items-center gap-2">@order.OrderNo <WebOrderBadge Status="@order.Status" /></h1>
+            <div class="page-sub">@Fmt.Date(order.CreatedAt) @order.CreatedAt.ToString("h:mm tt") · Website order</div>
+        </div>
+        @if (Auth.Can(Perms.WebOrdersEdit))
+        {
+            <div class="d-flex flex-wrap gap-2">
+                @if (order.Status == WebOrderStatus.Pending)
+                {
+                    <button class="btn btn-outline-secondary text-danger" disabled="@busy" @onclick="CancelAsync"><i class="bi bi-x-circle me-1"></i>Cancel</button>
+                    <button class="btn btn-primary px-3" disabled="@busy" @onclick="ConfirmAsync"><i class="bi bi-check2-circle me-1"></i>Confirm order</button>
+                }
+                @if (order.Status == WebOrderStatus.Confirmed)
+                {
+                    <button class="btn btn-outline-secondary text-danger" disabled="@busy" @onclick="CancelAsync"><i class="bi bi-x-circle me-1"></i>Cancel</button>
+                    <button class="btn btn-success px-3" disabled="@busy" @onclick="DeliverAsync"><i class="bi bi-truck me-1"></i>Delivered · taka paoa geche</button>
+                }
+            </div>
+        }
+    </div>
+
+    @* Kaaj er dhap *@
+    <div class="wo-steps mb-3">
+        @foreach (var (step, i) in Steps.Select((s, i) => (s, i)))
+        {
+            <div class="wo-step @(StepState(i))">
+                <span class="wo-dot"><i class="bi @step.Icon"></i></span>
+                <span>@step.Title</span>
+            </div>
+        }
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">Products</div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead><tr><th>Product</th><th>Size / Color</th><th class="text-end">Qty</th><th class="text-end">Dam</th><th class="text-end">Total</th></tr></thead>
+                        <tbody>
+                            @foreach (var i in order.Items)
+                            {
+                                <tr>
+                                    <td>@i.ProductName</td>
+                                    <td>@i.VariantName</td>
+                                    <td class="text-end">@i.Quantity</td>
+                                    <td class="text-end">@Fmt.Money(i.UnitPrice)</td>
+                                    <td class="text-end">@Fmt.Money(i.Total)</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr><td colspan="4" class="text-end">Subtotal</td><td class="text-end">@Fmt.Money(order.SubTotal)</td></tr>
+                            <tr><td colspan="4" class="text-end">Delivery charge</td><td class="text-end">@Fmt.Money(order.DeliveryCharge)</td></tr>
+                            <tr class="fw-bold"><td colspan="4" class="text-end">Total (COD)</td><td class="text-end">@Fmt.Money(order.Total)</td></tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card mb-3">
+                <div class="card-header">Customer</div>
+                <div class="card-body">
+                    <div class="fw-semibold fs-5">@order.CustomerName</div>
+                    <a class="d-block mb-2" href="tel:@order.Phone"><i class="bi bi-telephone me-1"></i>@PhoneHelper.Pretty(order.Phone)</a>
+                    <div class="small text-muted"><i class="bi bi-geo-alt me-1"></i>@order.Address</div>
+                    @if (order.Note != null)
+                    {
+                        <div class="small mt-2 p-2 rounded" style="background:#fffbeb"><i class="bi bi-chat-left-text me-1"></i>@order.Note</div>
+                    }
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-body small">
+                    @if (order.InvoiceNo != null && order.SaleId != null)
+                    {
+                        <div class="mb-1"><strong>Invoice:</strong> <a href="sales/@order.SaleId">@order.InvoiceNo</a></div>
+                    }
+                    @if (order.HandledBy != null)
+                    {
+                        <div class="mb-1"><strong>Handled by:</strong> @order.HandledBy</div>
+                    }
+                    @if (order.CancelReason != null)
+                    {
+                        <div class="text-danger"><strong>Cancel er karon:</strong> @order.CancelReason</div>
+                    }
+                    @if (order.Status == WebOrderStatus.Pending)
+                    {
+                        <div class="text-muted"><i class="bi bi-info-circle me-1"></i>Confirm korle invoice toiri hobe, stock kombe ar customer list e jog hobe.</div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private record Step(string Title, string Icon);
+
+    private static readonly Step[] Steps =
+    {
+        new("Order ashche", "bi-bag"), new("Confirm", "bi-check2-circle"), new("Delivered", "bi-truck")
+    };
+
+    private WebOrder? order;
+    private string? error;
+    private string? message;
+    private bool busy;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            order = await Orders.GetByIdAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            error = "Order pawa jay nai: " + ex.Message;
+        }
+    }
+
+    private string StepState(int i)
+    {
+        if (order!.Status == WebOrderStatus.Cancelled) return i == 0 ? "done" : "off";
+        var reached = order.Status switch { WebOrderStatus.Pending => 0, WebOrderStatus.Confirmed => 1, _ => 2 };
+        return i <= reached ? "done" : "";
+    }
+
+    private Task ConfirmAsync() => RunAsync(async () =>
+    {
+        order = await Orders.ConfirmAsync(Id);
+        message = $"Confirm hoyeche. Invoice {order.InvoiceNo} toiri hoyeche, stock komeche.";
+    });
+
+    private Task DeliverAsync() => RunAsync(async () =>
+    {
+        order = await Orders.DeliverAsync(Id);
+        message = "Delivered. Taka (COD) invoice e joma hoyeche.";
+    });
+
+    private async Task CancelAsync()
+    {
+        var reason = await JS.InvokeAsync<string?>("prompt", "Cancel er karon (optional):", "");
+        if (reason == null) return;   // prompt e Cancel chaple
+        await RunAsync(async () =>
+        {
+            order = await Orders.CancelAsync(Id, reason);
+            message = "Order cancel hoyeche." + (order.InvoiceNo != null ? " Invoice bad hoyeche, stock ferot esheche." : "");
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

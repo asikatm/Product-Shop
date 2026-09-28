@@ -1,0 +1,171 @@
+@page "/shop/checkout"
+@layout ShopLayout
+@attribute [PublicPage]
+@implements IDisposable
+@inject StoreService Store
+@inject CartService Cart
+@inject NavigationManager Nav
+
+<PageTitle>অর্ডার কনফার্ম</PageTitle>
+
+<div class="st-wrap">
+    @if (Cart.Lines.Count == 0)
+    {
+        <div class="st-empty">
+            <i class="bi bi-bag-x"></i>
+            <p>আপনার কার্ট খালি।</p>
+            <a class="st-btn" href="shop">শাড়ি দেখুন</a>
+        </div>
+    }
+    else
+    {
+        <div class="st-checkout">
+            <h1 class="st-checkout-title">অর্ডারটি কনফার্ম করতে ফর্মটি সঠিক ভাবে পূরণ করে নিচের <span>অর্ডার করুন</span> বাটনে ক্লিক করুন।</h1>
+
+            <EditForm Model="request" OnValidSubmit="PlaceAsync">
+                <DataAnnotationsValidator />
+                <div class="st-checkout-grid">
+                    @* ---------- Billing ---------- *@
+                    <section>
+                        <h2 class="st-h2">Billing details</h2>
+
+                        <label class="st-field-label">আপনার নাম <span>*</span></label>
+                        <InputText class="st-input" @bind-Value="request.Name" placeholder="নাম লিখুন" autocomplete="name" />
+                        <ValidationMessage For="() => request.Name" />
+
+                        <label class="st-field-label">মোবাইল নাম্বার <span>*</span></label>
+                        <InputText type="tel" inputmode="numeric" class="st-input" @bind-Value="request.Phone" placeholder="১১ ডিজিটের ইংরেজি নাম্বার (01XXXXXXXXX)" autocomplete="tel" />
+                        <ValidationMessage For="() => request.Phone" />
+                        @if (phoneError != null)
+                        {
+                            <div class="validation-message">@phoneError</div>
+                        }
+
+                        <label class="st-field-label">সম্পূর্ণ ঠিকানা <span>*</span></label>
+                        <InputTextArea class="st-input" rows="2" @bind-Value="request.Address" placeholder="গ্রাম, থানা, জেলা বিস্তারিত লিখুন" autocomplete="street-address" />
+                        <ValidationMessage For="() => request.Address" />
+
+                        <label class="st-field-label">নোট <small>(ঐচ্ছিক)</small></label>
+                        <InputTextArea class="st-input" rows="2" @bind-Value="request.Note" placeholder="যেমন: বিকালে ডেলিভারি দিবেন" />
+                    </section>
+
+                    @* ---------- Your order ---------- *@
+                    <section class="st-summary">
+                        <h2 class="st-h2">Your order</h2>
+                        <div class="st-sum-head"><span>Product</span><span>Subtotal</span></div>
+
+                        @foreach (var line in Cart.Lines)
+                        {
+                            <div class="st-sum-line" @key="line.VariantId">
+                                <button type="button" class="st-remove" title="বাদ দিন" @onclick="() => Cart.RemoveAsync(line.VariantId)"><i class="bi bi-x"></i></button>
+                                <div class="st-sum-img">
+                                    @if (line.Image != null)
+                                    {
+                                        <img src="@Store.ImageUrl(line.Image)" alt="" />
+                                    }
+                                </div>
+                                <div class="st-sum-name">
+                                    <div>@line.Name</div>
+                                    @if (line.VariantLabel != "Free")
+                                    {
+                                        <small>@line.VariantLabel</small>
+                                    }
+                                    <div class="st-qty st-qty-sm">
+                                        <button type="button" @onclick="() => Cart.SetQuantityAsync(line.VariantId, line.Quantity - 1)"><i class="bi bi-dash"></i></button>
+                                        <span>@line.Quantity</span>
+                                        <button type="button" @onclick="() => Cart.SetQuantityAsync(line.VariantId, line.Quantity + 1)"><i class="bi bi-plus"></i></button>
+                                    </div>
+                                </div>
+                                <div class="st-sum-price">৳ @line.Total.ToString("N0")</div>
+                            </div>
+                        }
+
+                        <div class="st-sum-row"><span>Subtotal</span><span>৳ @Cart.Total.ToString("N0")</span></div>
+                        <div class="st-sum-row"><span>ডেলিভারি চার্জ</span><span>@(delivery == 0 ? "ফ্রি" : $"৳ {delivery:N0}")</span></div>
+                        <div class="st-sum-row st-sum-total"><span>Total</span><span>৳ @Total.ToString("N0")</span></div>
+
+                        <div class="st-cod">
+                            <div class="st-cod-title"><i class="bi bi-cash-coin me-2"></i>অগ্রিম পেমেন্ট ছাড়া অর্ডার করুন</div>
+                            <div class="st-cod-body">ক্যাশ অন ডেলিভারি — পণ্য হাতে পেয়ে টাকা দিন। @(delivery == 0 ? "ডেলিভারি চার্জ ফ্রি।" : "")</div>
+                        </div>
+
+                        @if (error != null)
+                        {
+                            <div class="alert alert-danger mt-3 mb-0">@error</div>
+                        }
+
+                        <button type="submit" class="st-btn st-btn-xl w-100 mt-3" disabled="@busy">
+                            @if (busy)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span><span>অপেক্ষা করুন...</span>
+                            }
+                            else
+                            {
+                                <span><i class="bi bi-bag-check-fill me-2"></i>অর্ডার কনফার্ম করুন ৳ @Total.ToString("N0")</span>
+                            }
+                        </button>
+                    </section>
+                </div>
+            </EditForm>
+        </div>
+    }
+</div>
+
+@code {
+    private PlaceOrderRequest request = new();
+    private decimal delivery;
+    private string? error;
+    private string? phoneError;
+    private bool busy;
+
+    private decimal Total => Cart.Total + delivery;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Cart.Changed += OnCartChanged;
+        await Cart.LoadAsync();
+        try
+        {
+            delivery = (await Store.GetInfoAsync()).DeliveryCharge;
+        }
+        catch (Exception)
+        {
+            delivery = 0;
+        }
+    }
+
+    private async Task PlaceAsync()
+    {
+        error = null;
+        phoneError = null;
+        var phone = PhoneHelper.Normalize(request.Phone);
+        if (phone == null)
+        {
+            phoneError = "সঠিক মোবাইল নাম্বার দিন (01 দিয়ে শুরু, ১১ ডিজিট)।";
+            return;
+        }
+
+        request.Phone = phone;
+        request.Items = Cart.Lines.Select(l => new PlaceOrderItem { VariantId = l.VariantId, Quantity = l.Quantity }).ToList();
+
+        busy = true;
+        try
+        {
+            var result = await Store.PlaceOrderAsync(request);
+            await Cart.ClearAsync();
+            Nav.NavigateTo($"shop/order/{result.OrderNo}?phone={phone}");
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void OnCartChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Cart.Changed -= OnCartChanged;
+}

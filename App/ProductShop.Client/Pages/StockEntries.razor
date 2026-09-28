@@ -1,13 +1,14 @@
 @page "/stock"
-@attribute [AdminOnly]
+@attribute [RequirePermission(Perms.StockView)]
 @inject StockService StockService
+@inject AuthState Auth
 @inject IJSRuntime JS
 
 <PageTitle>Stock In</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0">Stock In</h1>
-    <a class="btn btn-primary" href="stock/new">+ New Stock Entry</a>
+    @if (Auth.Can(Perms.StockAdd)) { <a class="btn btn-primary" href="stock/new">+ New Stock Entry</a> }
 </div>
 
 <div class="card mb-3">
@@ -67,7 +68,7 @@ else
                             <td class="text-end">@Fmt.Money(e.TotalAmount)</td>
                             <td class="text-end text-nowrap">
                                 <a class="btn btn-sm btn-outline-secondary" href="stock/@e.Id">View</a>
-                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(e)">Delete</button>
+                                @if (Auth.Can(Perms.StockDelete)) { <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(e)">Delete</button> }
                             </td>
                         </tr>
                     }

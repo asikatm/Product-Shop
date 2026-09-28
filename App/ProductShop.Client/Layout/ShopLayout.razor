@@ -1,0 +1,101 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject CartService Cart
+@inject StoreService Store
+@inject NavigationManager Nav
+@inject IConfiguration Config
+
+@* Customer der website - software er sidebar / login nai *@
+<div class="st">
+    <header class="st-header">
+        <div class="st-wrap st-header-row">
+            <a class="st-brand" href="shop">
+                <span class="st-logo"><i class="bi bi-bag-heart-fill"></i></span>
+                <span>
+                    <span class="st-brand-name">@ShopName</span>
+                    <span class="st-brand-sub">Always better quality</span>
+                </span>
+            </a>
+
+            <form class="st-search d-none d-md-flex" @onsubmit="Search" @onsubmit:preventDefault>
+                <i class="bi bi-search"></i>
+                <input placeholder="শাড়ি খুঁজুন... (নাম বা কোড)" @bind="q" />
+            </form>
+
+            <div class="ms-auto d-flex align-items-center gap-2">
+                @if (!string.IsNullOrWhiteSpace(Phone))
+                {
+                    <a class="st-call d-none d-lg-inline-flex" href="tel:@Phone"><i class="bi bi-telephone-fill"></i> @Phone</a>
+                }
+                <a class="st-cart" href="shop/checkout" title="Cart">
+                    <i class="bi bi-bag"></i>
+                    @if (Cart.Count > 0)
+                    {
+                        <span class="st-cart-count">@Cart.Count</span>
+                    }
+                    <span class="st-cart-total d-none d-sm-inline">৳ @Cart.Total.ToString("N0")</span>
+                </a>
+            </div>
+        </div>
+
+        <nav class="st-cats">
+            <div class="st-wrap st-cats-row">
+                <NavLink href="shop" Match="NavLinkMatch.All">সব শাড়ি</NavLink>
+                @foreach (var c in categories)
+                {
+                    <NavLink href="@($"shop/category/{c.Id}")">@c.Name</NavLink>
+                }
+            </div>
+        </nav>
+    </header>
+
+    <main class="st-main">
+        @Body
+    </main>
+
+    <footer class="st-footer">
+        <div class="st-wrap d-flex flex-wrap justify-content-between gap-3">
+            <div>
+                <div class="fw-bold mb-1">@ShopName</div>
+                <div class="small opacity-75">ক্যাশ অন ডেলিভারি · সারা দেশে হোম ডেলিভারি</div>
+            </div>
+            <div class="small opacity-75 text-md-end">
+                @if (!string.IsNullOrWhiteSpace(Phone))
+                {
+                    <div><i class="bi bi-telephone me-1"></i>@Phone</div>
+                }
+                <div>© @DateTime.Today.Year @ShopName</div>
+            </div>
+        </div>
+    </footer>
+</div>
+
+@code {
+    private List<StoreCategory> categories = new();
+    private string q = string.Empty;
+
+    private string ShopName => string.IsNullOrWhiteSpace(Config["Shop:Name"]) ? "Garments Showroom" : Config["Shop:Name"]!;
+
+    // Placeholder number ("01XXXXXXXXX") hole dekhano hoy na
+    private string? Phone => PhoneHelper.Normalize(Config["Shop:Phone"]);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Cart.Changed += OnCartChanged;
+        await Cart.LoadAsync();
+        try
+        {
+            categories = await Store.GetCategoriesAsync();
+        }
+        catch (HttpRequestException)
+        {
+            // Category na ashleo page cholbe
+        }
+    }
+
+    private void Search() => Nav.NavigateTo(string.IsNullOrWhiteSpace(q) ? "shop" : $"shop?q={Uri.EscapeDataString(q.Trim())}");
+
+    private void OnCartChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Cart.Changed -= OnCartChanged;
+}

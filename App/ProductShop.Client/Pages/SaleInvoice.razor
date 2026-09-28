@@ -1,5 +1,7 @@
 @page "/sales/{Id:int}"
+@attribute [RequirePermission(Perms.SalesView, Perms.SalesAdd)]
 @inject SaleService SaleService
+@inject AuthState Auth
 @inject IConfiguration Config
 @inject IJSRuntime JS
 
@@ -22,11 +24,11 @@ else
     <div class="d-flex justify-content-between align-items-center mb-3 no-print">
         <a href="sales">&larr; Sales list</a>
         <div>
-            @if (sale.DueAmount > 0 && sale.CustomerId.HasValue)
+            @if (sale.DueAmount > 0 && sale.CustomerId.HasValue && Auth.Can(Perms.CustomersEdit))
             {
                 <a class="btn btn-outline-danger" href="customers/@sale.CustomerId">Baki joma nin</a>
             }
-            <a class="btn btn-outline-success" href="sales/new">+ New Sale</a>
+            @if (Auth.Can(Perms.SalesAdd)) { <a class="btn btn-outline-success" href="sales/new">+ New Sale</a> }
             <button class="btn btn-primary" @onclick="PrintAsync">Print Invoice</button>
         </div>
     </div>

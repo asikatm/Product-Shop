@@ -21,6 +21,7 @@ public class CustomersController : ControllerBase
     // GET: api/customers
     // Protiti customer er mot kena ar baki shoho
     [HttpGet]
+    [Permission(Perms.CustomersView, Perms.SalesAdd)]
     public async Task<ActionResult<List<Customer>>> GetAll()
     {
         var customers = await _db.Customers.OrderBy(c => c.Name).ToListAsync();
@@ -42,6 +43,7 @@ public class CustomersController : ControllerBase
     // GET: api/customers/5
     // Customer, tar shob sale ar baki joma er hisab
     [HttpGet("{id:int}")]
+    [Permission(Perms.CustomersView)]
     public async Task<ActionResult<CustomerDetails>> GetById(int id)
     {
         var customer = await _db.Customers.FindAsync(id);
@@ -65,6 +67,7 @@ public class CustomersController : ControllerBase
 
     // POST: api/customers
     [HttpPost]
+    [Permission(Perms.CustomersAdd)]
     public async Task<ActionResult<Customer>> Create(Customer customer)
     {
         var error = Normalize(customer);
@@ -81,6 +84,7 @@ public class CustomersController : ControllerBase
 
     // PUT: api/customers/5
     [HttpPut("{id:int}")]
+    [Permission(Perms.CustomersEdit)]
     public async Task<IActionResult> Update(int id, Customer customer)
     {
         if (id != customer.Id) return BadRequest("Id mismatch");
@@ -118,7 +122,7 @@ public class CustomersController : ControllerBase
 
     // DELETE: api/customers/5
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Permission(Perms.CustomersDelete)]
     public async Task<IActionResult> Delete(int id)
     {
         var customer = await _db.Customers.FindAsync(id);
@@ -135,6 +139,7 @@ public class CustomersController : ControllerBase
     // POST: api/customers/5/payments
     // Baki joma: shobcheye purono baki invoice theke age shodh hoy
     [HttpPost("{id:int}/payments")]
+    [Permission(Perms.CustomersEdit)]
     public async Task<ActionResult<List<SalePayment>>> ReceivePayment(int id, ReceivePaymentRequest request)
     {
         if (!await _db.Customers.AnyAsync(c => c.Id == id)) return NotFound();
@@ -180,7 +185,7 @@ public class CustomersController : ControllerBase
     // DELETE: api/customers/payments/5
     // Vul joma bad dile invoice e abar baki fire ashe
     [HttpDelete("payments/{paymentId:int}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Permission(Perms.CustomersDelete)]
     public async Task<IActionResult> DeletePayment(int paymentId)
     {
         var payment = await _db.SalePayments.FindAsync(paymentId);

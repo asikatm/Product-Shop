@@ -11,14 +11,19 @@ else
 {
     <Router AppAssembly="@typeof(App).Assembly">
         <Found Context="routeData">
-            @if (!Auth.IsLoggedIn && routeData.PageType != typeof(Login) && routeData.PageType != typeof(Register))
+            @if (!Auth.IsLoggedIn && routeData.PageType != typeof(Login) && routeData.PageType != typeof(Register) && !Attribute.IsDefined(routeData.PageType, typeof(PublicPageAttribute)))
             {
                 <RedirectToLogin />
             }
-            else if (!Auth.IsAdmin && Attribute.IsDefined(routeData.PageType, typeof(AdminOnlyAttribute)))
+            else if (Auth.IsLoggedIn && Attribute.GetCustomAttribute(routeData.PageType, typeof(RequirePermissionAttribute)) is RequirePermissionAttribute need && !Auth.Can(need.AnyOf))
             {
                 <LayoutView Layout="@typeof(MainLayout)">
-                    <div class="alert alert-warning">Ei page shudhu Admin er jonno.</div>
+                    <div class="pf-card text-center py-5" style="max-width:560px;margin:3rem auto">
+                        <div class="stat-icon tone-warning mx-auto mb-3" style="width:56px;height:56px;font-size:1.5rem;border-radius:50%"><i class="bi bi-lock"></i></div>
+                        <h1 class="h4">Ei page er permission nai</h1>
+                        <p class="text-muted mb-4">Apnar role e ei menu deya hoy nai. Dorkar hole Admin ke <strong>Menu Permission</strong> theke dite bolun.</p>
+                        <a class="btn btn-outline-secondary" href="account">My Account</a>
+                    </div>
                 </LayoutView>
             }
             else

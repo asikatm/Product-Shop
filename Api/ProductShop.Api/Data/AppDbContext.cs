@@ -21,6 +21,11 @@ public class AppDbContext : DbContext
     public DbSet<SaleItem> SaleItems => Set<SaleItem>();
     public DbSet<SalePayment> SalePayments => Set<SalePayment>();
     public DbSet<AppUser> Users => Set<AppUser>();
+    public DbSet<AppRole> AppRoles => Set<AppRole>();
+    public DbSet<AppUserRole> UserRoles => Set<AppUserRole>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<WebOrder> WebOrders => Set<WebOrder>();
+    public DbSet<WebOrderItem> WebOrderItems => Set<WebOrderItem>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -158,10 +163,49 @@ public class AppDbContext : DbContext
             e.ToTable("Users");
             e.Property(u => u.Username).HasMaxLength(50).IsRequired();
             e.Property(u => u.FullName).HasMaxLength(100).IsRequired();
-            e.Property(u => u.Role).HasMaxLength(20).IsRequired();
             e.Property(u => u.Email).HasMaxLength(100);
             e.Property(u => u.Phone).HasMaxLength(20);
             e.HasIndex(u => u.Username).IsUnique();
+            e.HasMany(u => u.UserRoles).WithOne().HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<WebOrder>(e =>
+        {
+            e.Property(o => o.OrderNo).IsRequired();
+            e.HasIndex(o => o.OrderNo).IsUnique();
+            e.HasIndex(o => o.Status);
+            e.HasIndex(o => o.CreatedAt);
+            e.HasMany(o => o.Items).WithOne().HasForeignKey(i => i.WebOrderId).OnDelete(DeleteBehavior.Cascade);
+            // Sale delete hole order theke link shoriye dey
+            e.HasOne<Sale>().WithMany().HasForeignKey(o => o.SaleId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<WebOrderItem>(e =>
+        {
+            e.HasOne<ProductVariant>().WithMany().HasForeignKey(i => i.ProductVariantId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AppRole>(e =>
+        {
+            e.ToTable("Roles");
+            e.Property(r => r.Name).HasMaxLength(50).IsRequired();
+            e.Property(r => r.Description).HasMaxLength(200);
+            e.HasIndex(r => r.Name).IsUnique();
+            e.HasMany(r => r.Permissions).WithOne().HasForeignKey(p => p.RoleId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(r => r.UserRoles).WithOne(ur => ur.Role).HasForeignKey(ur => ur.RoleId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AppUserRole>(e =>
+        {
+            e.ToTable("UserRoles");
+            e.HasKey(ur => new { ur.UserId, ur.RoleId });
+        });
+
+        modelBuilder.Entity<RolePermission>(e =>
+        {
+            e.ToTable("RolePermissions");
+            e.HasKey(p => new { p.RoleId, p.Permission });
+            e.Property(p => p.Permission).HasMaxLength(60);
         });
     }
 }
