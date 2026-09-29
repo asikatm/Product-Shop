@@ -23,6 +23,11 @@
                 </div>
             </div>
         </section>
+
+        @if (products != null)
+        {
+            <CategorySlider AllImages="@products.Where(p => p.Images.Count > 0).Select(p => p.Images[0]).Take(12).ToList()" AllCount="products.Count" />
+        }
     }
 
     <div class="st-section-head">

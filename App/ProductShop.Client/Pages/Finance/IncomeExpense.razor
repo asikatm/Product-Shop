@@ -1,0 +1,359 @@
+@page "/finance/transactions"
+@attribute [RequirePermission(Perms.TxnView, Perms.AccountsView)]
+@inject FinanceService Finance
+@inject AuthState Auth
+@inject IJSRuntime JS
+
+<PageTitle>Income & Expense</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1 class="h3">Income & Expense</h1>
+        <div class="page-sub">Dokan bhara, beton, bill - shob aay ar khoroch er hisab.</div>
+    </div>
+    @if (Auth.Can(Perms.TxnAdd))
+    {
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-success" @onclick="() => StartAdd(TxnTypes.Income)"><i class="bi bi-plus-lg me-1"></i>Income</button>
+            <button class="btn btn-primary" @onclick="() => StartAdd(TxnTypes.Expense)"><i class="bi bi-plus-lg me-1"></i>Expense</button>
+        </div>
+    }
+</div>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger d-flex gap-2"><i class="bi bi-exclamation-triangle-fill"></i><span>@error</span></div>
+}
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-success d-flex gap-2"><i class="bi bi-check-circle-fill"></i><span>@message</span></div>
+}
+
+<div class="card mb-3">
+    <div class="card-body d-flex flex-wrap gap-2 align-items-center">
+        <DateRangePicker From="from" To="to" OnChange="SetRangeAsync" />
+        <select class="form-select form-select-sm" style="width:auto" value="@type" @onchange="SetTypeAsync" aria-label="Type">
+            <option value="">Shob type</option>
+            @foreach (var t in TxnTypes.All)
+            {
+                <option value="@t">@t</option>
+            }
+        </select>
+        <select class="form-select form-select-sm" style="width:auto" value="@(accountId?.ToString() ?? "")" @onchange="SetAccountAsync" aria-label="Account">
+            <option value="">Shob account</option>
+            @foreach (var a in accounts)
+            {
+                <option value="@a.Id">@a.Name</option>
+            }
+        </select>
+        <input class="form-control form-control-sm ms-lg-auto" style="max-width:220px" placeholder="Khat / note khujun" @bind="search" @bind:event="oninput" />
+    </div>
+</div>
+
+@if (list == null)
+{
+    @if (string.IsNullOrEmpty(error))
+    {
+        <div class="loading">Loading...</div>
+    }
+}
+else
+{
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-arrow-down-circle" Tone="success" Label="Income" Value="@Fmt.Money(Sum(TxnTypes.Income))">@Shown.Count(t => t.Type == TxnTypes.Income) ta entry</StatCard></div>
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-arrow-up-circle" Tone="danger" Label="Expense" Value="@Fmt.Money(Sum(TxnTypes.Expense))">@Shown.Count(t => t.Type == TxnTypes.Expense) ta entry</StatCard></div>
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-arrow-left-right" Tone="primary" Label="Transfer" Value="@Fmt.Money(Sum(TxnTypes.Transfer))">@Shown.Count(t => t.Type == TxnTypes.Transfer) ta entry</StatCard></div>
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-calculator" Tone="purple" Label="Income − Expense" Value="@Fmt.Money(Sum(TxnTypes.Income) - Sum(TxnTypes.Expense))" ValueClass="@(Sum(TxnTypes.Income) < Sum(TxnTypes.Expense) ? "text-danger" : "")">Ei filter e</StatCard></div>
+    </div>
+
+    <div class="card">
+        @if (Shown.Count == 0)
+        {
+            <div class="card-body text-center text-muted py-5">
+                <i class="bi bi-receipt fs-1 d-block mb-2"></i>
+                Ei shomoye kono entry nai.
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th>Date</th><th>Type</th><th>Khat</th><th>Account</th><th>Note</th><th class="text-end">Taka</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var t in Shown)
+                        {
+                            <tr>
+                                <td class="text-nowrap">@Fmt.Date(t.Date)</td>
+                                <td><TxnBadge Type="@t.Type" /></td>
+                                <td>
+                                    @t.Category
+                                    @if (t.Source != TxnSources.Manual)
+                                    {
+                                        <span class="badge bg-light text-muted border ms-1" title="@t.Source page theke">@t.Source</span>
+                                    }
+                                </td>
+                                <td class="text-nowrap">@t.AccountName@(t.ToAccountName != null ? $" → {t.ToAccountName}" : "")</td>
+                                <td class="small text-muted">
+                                    @t.Note
+                                    @if (t.Reference != null) { <span class="d-block">Ref: @t.Reference</span> }
+                                </td>
+                                <td class="text-end fw-semibold text-nowrap @(t.Type == TxnTypes.Expense ? "text-danger" : t.Type == TxnTypes.Income ? "text-success" : "")">
+                                    @(t.Type == TxnTypes.Expense ? "− " : t.Type == TxnTypes.Income ? "+ " : "")@Fmt.Money(t.Amount)
+                                </td>
+                                <td class="text-end text-nowrap">
+                                    @if (t.Source == TxnSources.Manual)
+                                    {
+                                        @if (Auth.Can(Perms.TxnEdit)) { <button class="btn btn-sm btn-light border" title="Edit" @onclick="() => StartEdit(t)"><i class="bi bi-pencil"></i></button> }
+                                        @if (Auth.Can(Perms.TxnDelete)) { <button class="btn btn-sm btn-light border text-danger ms-1" title="Delete" disabled="@busy" @onclick="() => DeleteAsync(t)"><i class="bi bi-trash"></i></button> }
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+
+@* ---------- Add / edit ---------- *@
+@if (form != null)
+{
+    <div class="ui-modal-backdrop" @onclick="() => form = null"></div>
+    <div class="ui-modal" role="dialog" aria-modal="true">
+        <div class="ui-modal-head">
+            <h2 class="h5 mb-0">@(form.Id == 0 ? "Notun" : "Edit") @form.Type</h2>
+            <button class="btn btn-sm btn-link text-muted" title="Close" @onclick="() => form = null"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <EditForm Model="form" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+            <div class="ui-modal-body">
+                @if (!string.IsNullOrEmpty(formError))
+                {
+                    <div class="alert alert-danger py-2 small">@formError</div>
+                }
+                <div class="row g-3">
+                    <div class="col-12">
+                        <div class="row g-2">
+                            @foreach (var t in TxnTypes.All)
+                            {
+                                <div class="col-4">
+                                    <button type="button" class="cf-type @(form.Type == t ? "active" : "")" @onclick="() => SetFormType(t)">
+                                        <i class="bi @(t == TxnTypes.Income ? "bi-arrow-down-left" : t == TxnTypes.Expense ? "bi-arrow-up-right" : "bi-arrow-left-right")"></i>
+                                        <span class="cf-type-name">@t</span>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label">Date</label>
+                        <InputDate class="form-control" @bind-Value="form.Date" />
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label">Taka <span class="text-danger">*</span></label>
+                        <InputNumber class="form-control text-end" @bind-Value="form.Amount" />
+                        <ValidationMessage For="() => form.Amount" />
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label">@(form.Type == TxnTypes.Income ? "Kon account e ashlo" : form.Type == TxnTypes.Expense ? "Kon account theke" : "Theke") <span class="text-danger">*</span></label>
+                        <InputSelect class="form-select" @bind-Value="form.AccountId">
+                            <option value="0">-- Select --</option>
+                            @foreach (var a in accounts.Where(a => a.IsActive || a.Id == form.AccountId))
+                            {
+                                <option value="@a.Id">@a.Name (@Fmt.Money(a.Balance))</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => form.AccountId" />
+                    </div>
+                    @if (form.Type == TxnTypes.Transfer)
+                    {
+                        <div class="col-sm-6">
+                            <label class="form-label">E <span class="text-danger">*</span></label>
+                            <InputSelect class="form-select" @bind-Value="form.ToAccountId">
+                                <option value="">-- Select --</option>
+                                @foreach (var a in accounts.Where(a => (a.IsActive || a.Id == form.ToAccountId) && a.Id != form.AccountId))
+                                {
+                                    <option value="@a.Id">@a.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="col-sm-6">
+                            <label class="form-label">Khat <span class="text-danger">*</span></label>
+                            <InputText class="form-control" list="txn-cats" @bind-Value="form.Category" placeholder="@(form.Type == TxnTypes.Income ? "Other income" : "Shop rent")" />
+                            <datalist id="txn-cats">
+                                @foreach (var c in (form.Type == TxnTypes.Income ? TxnCategories.Income : TxnCategories.Expense).Union(UsedCategories))
+                                {
+                                    <option value="@c"></option>
+                                }
+                            </datalist>
+                        </div>
+                    }
+                    <div class="col-sm-6">
+                        <label class="form-label">Reference</label>
+                        <InputText class="form-control" @bind-Value="form.Reference" placeholder="Voucher / cheque / TrxID" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Note</label>
+                        <InputTextArea class="form-control" rows="2" @bind-Value="form.Note" />
+                    </div>
+                    @if (form.Type == TxnTypes.Income)
+                    {
+                        <div class="col-12 pf-hint"><i class="bi bi-info-circle me-1"></i>Product bikri er taka eikhane dite hobe na - sale / baki joma theke nije-i hisab hoy.</div>
+                    }
+                </div>
+            </div>
+            <div class="ui-modal-foot">
+                <button type="button" class="btn btn-light border" @onclick="() => form = null">Cancel</button>
+                <button type="submit" class="btn btn-primary px-3" disabled="@busy"><i class="bi bi-check2 me-1"></i>@(busy ? "Saving..." : "Save")</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@code {
+    // Accounts page theke "?account=3"
+    [SupplyParameterFromQuery(Name = "account")] public int? AccountParam { get; set; }
+
+    private List<FinanceTransaction>? list;
+    private List<FinanceAccount> accounts = new();
+    private FinanceTransaction? form;
+    private DateTime from, to;
+    private string type = "";
+    private int? accountId;
+    private string search = "";
+    private string? error, message, formError;
+    private bool busy;
+
+    private List<FinanceTransaction> Shown => (list ?? new())
+        .Where(t => search.Length == 0
+                 || t.Category.Contains(search, StringComparison.OrdinalIgnoreCase)
+                 || (t.Note?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+                 || (t.Reference?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false))
+        .ToList();
+
+    private IEnumerable<string> UsedCategories => (list ?? new()).Where(t => t.Type == form?.Type).Select(t => t.Category).Distinct();
+
+    private decimal Sum(string t) => Shown.Where(x => x.Type == t).Sum(x => x.Amount);
+
+    protected override async Task OnInitializedAsync()
+    {
+        (from, to) = DateRangePicker.Range("month");
+        accountId = AccountParam;
+        if (accountId != null) (from, to) = DateRangePicker.Range("year");
+        try
+        {
+            accounts = await Finance.GetAccountsAsync();
+        }
+        catch (Exception ex)
+        {
+            error = "Account list ana jay nai: " + ex.Message;
+        }
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            list = await Finance.GetTransactionsAsync(from, to, type, accountId);
+        }
+        catch (Exception ex)
+        {
+            error = "Data ana jay nai: " + ex.Message;
+        }
+    }
+
+    private async Task SetRangeAsync((DateTime From, DateTime To) r)
+    {
+        (from, to) = r;
+        await LoadAsync();
+    }
+
+    private async Task SetTypeAsync(ChangeEventArgs e)
+    {
+        type = e.Value?.ToString() ?? "";
+        await LoadAsync();
+    }
+
+    private async Task SetAccountAsync(ChangeEventArgs e)
+    {
+        accountId = int.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        await LoadAsync();
+    }
+
+    private void StartAdd(string t)
+    {
+        formError = null;
+        var first = accounts.FirstOrDefault(a => a.IsActive);
+        form = new FinanceTransaction { Type = t, AccountId = accountId ?? first?.Id ?? 0 };
+    }
+
+    private void StartEdit(FinanceTransaction t)
+    {
+        formError = null;
+        form = new FinanceTransaction
+        {
+            Id = t.Id, Date = t.Date, Type = t.Type, AccountId = t.AccountId, ToAccountId = t.ToAccountId, Category = t.Category,
+            Amount = t.Amount, Reference = t.Reference, Note = t.Note
+        };
+    }
+
+    private void SetFormType(string t)
+    {
+        if (form!.Type == t) return;
+        form.Type = t;
+        form.Category = t == TxnTypes.Transfer ? "Transfer" : "";
+        if (t != TxnTypes.Transfer) form.ToAccountId = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        busy = true;
+        formError = null;
+        try
+        {
+            await Finance.SaveTransactionAsync(form!);
+            message = $"{form!.Type} {Fmt.Money(form.Amount)} save hoyeche.";
+            form = null;
+            accounts = await Finance.GetAccountsAsync();
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            formError = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task DeleteAsync(FinanceTransaction t)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"{t.Type} {Fmt.Money(t.Amount)} ({t.Category}) delete korben?")) return;
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await Finance.DeleteTransactionAsync(t.Id);
+            message = "Delete hoyeche.";
+            accounts = await Finance.GetAccountsAsync();
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

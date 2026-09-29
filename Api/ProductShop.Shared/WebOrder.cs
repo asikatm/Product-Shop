@@ -37,8 +37,22 @@ public class WebOrder
     public string Status { get; set; } = WebOrderStatus.Pending;
 
     public decimal SubTotal { get; set; }
+    public decimal Discount { get; set; }
     public decimal DeliveryCharge { get; set; }
+
+    // SubTotal - Discount + DeliveryCharge
     public decimal Total { get; set; }
+
+    // Customer age theke je taka diyeche (bKash ityadi) - confirm e invoice e paid hoy
+    public decimal Advance { get; set; }
+
+    // Courier ke je taka tulte hobe
+    public decimal CodAmount => Math.Max(0, Total - Advance);
+
+    public DateTime? DeliveredAt { get; set; }
+
+    // Courier theke taka ashle je settlement e dhora hoyeche
+    public int? CourierSettlementId { get; set; }
 
     // Confirm korle je sale / invoice toiri hoy
     public int? SaleId { get; set; }
@@ -75,6 +89,52 @@ public class WebOrderItem
     public int Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal Total { get; set; }
+}
+
+// Confirm er age order bodlano: qty / dam / notun product, discount, advance
+public class WebOrderUpdateRequest
+{
+    [Required(ErrorMessage = "Customer er naam dite hobe")]
+    [StringLength(100)]
+    public string CustomerName { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Phone number dite hobe")]
+    [StringLength(20)]
+    public string Phone { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Thikana dite hobe")]
+    [StringLength(300)]
+    public string Address { get; set; } = string.Empty;
+
+    [StringLength(300)]
+    public string? Note { get; set; }
+
+    public List<WebOrderLine> Items { get; set; } = new();
+
+    public decimal Discount { get; set; }
+    public decimal DeliveryCharge { get; set; }
+    public decimal Advance { get; set; }
+}
+
+// Order e notun product add korar list (kena dam nai)
+public class OrderVariantOption
+{
+    public int VariantId { get; set; }
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public string? Code { get; set; }
+    public string Label { get; set; } = string.Empty;
+    public string? Sku { get; set; }
+    public decimal Price { get; set; }
+    public int Stock { get; set; }
+    public string? Image { get; set; }
+}
+
+public class WebOrderLine
+{
+    public int VariantId { get; set; }
+    public int Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
 }
 
 public class CancelWebOrderRequest
@@ -124,6 +184,9 @@ public class StoreCategory
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public int ProductCount { get; set; }
+
+    // Category slider er gol chobi - ei category er notun product er prothom chobi
+    public string? Image { get; set; }
 }
 
 public class StoreInfo

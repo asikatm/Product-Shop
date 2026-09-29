@@ -22,6 +22,16 @@ public class WebOrderService
     public async Task<WebOrder?> GetByIdAsync(int id) =>
         await _http.GetFromJsonAsync<WebOrder>($"api/weborders/{id}");
 
+    public async Task<List<OrderVariantOption>> GetVariantsAsync() =>
+        await _http.GetFromJsonAsync<List<OrderVariantOption>>("api/weborders/variants") ?? new();
+
+    public async Task<WebOrder> UpdateAsync(int id, WebOrderUpdateRequest request)
+    {
+        var response = await _http.PutAsJsonAsync($"api/weborders/{id}", request);
+        await response.EnsureOkAsync();
+        return (await response.Content.ReadFromJsonAsync<WebOrder>())!;
+    }
+
     public Task<WebOrder> ConfirmAsync(int id) => ActionAsync(id, "confirm", new { });
 
     public Task<WebOrder> DeliverAsync(int id) => ActionAsync(id, "deliver", new { });

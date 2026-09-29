@@ -16,7 +16,13 @@ public static class MenuStyle
         [AppMenus.Catalog] = "purple",
         [AppMenus.CostPrice] = "warning",
         [AppMenus.Users] = "teal",
-        [AppMenus.Roles] = "danger"
+        [AppMenus.Roles] = "danger",
+        [AppMenus.Finance] = "primary",
+        [AppMenus.Accounts] = "teal",
+        [AppMenus.Transactions] = "success",
+        [AppMenus.Courier] = "orange",
+        [AppMenus.CashFlow] = "info",
+        [AppMenus.Assets] = "purple"
     };
 
     private static readonly string[] RoleTones = { "primary", "success", "pink", "orange", "teal", "purple", "info", "warning" };

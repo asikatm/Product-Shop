@@ -1,0 +1,157 @@
+@* Cash in (upore) ar cash out (niche) - ek axis, 0 line theke dui dike. Hover e tooltip, Table view o ache. *@
+
+<div class="viz">
+    <div class="viz-toggle" role="group" aria-label="View">
+        <button class="@(table ? "" : "on")" @onclick="() => table = false">Chart</button>
+        <button class="@(table ? "on" : "")" @onclick="() => table = true">Table</button>
+    </div>
+
+    <ul class="viz-legend cf-legend">
+        <li><span class="viz-swatch" style="background:@InColor"></span>Cash in <span class="viz-legend-value">@Format(Rows.Sum(r => r.CashIn))</span></li>
+        <li><span class="viz-swatch" style="background:@OutColor"></span>Cash out <span class="viz-legend-value">@Format(Rows.Sum(r => r.CashOut))</span></li>
+        <li>Net <span class="viz-legend-value @(Rows.Sum(r => r.Net) < 0 ? "text-danger" : "")">@Format(Rows.Sum(r => r.Net))</span></li>
+    </ul>
+
+    @if (Rows.Count == 0 || Rows.All(r => r.CashIn == 0 && r.CashOut == 0))
+    {
+        <div class="viz-empty"><i class="bi bi-bar-chart-line"></i><span>Ei shomoye kono lenden nai</span></div>
+    }
+    else if (table)
+    {
+        <div class="viz-table-scroll">
+            <table class="table table-sm mb-0 viz-table">
+                <thead><tr><th>Date</th><th class="text-end">Cash in</th><th class="text-end">Cash out</th><th class="text-end">Net</th></tr></thead>
+                <tbody>
+                    @foreach (var r in Rows)
+                    {
+                        <tr>
+                            <td>@r.Label</td>
+                            <td class="text-end">@Format(r.CashIn)</td>
+                            <td class="text-end">@Format(r.CashOut)</td>
+                            <td class="text-end @(r.Net < 0 ? "text-danger" : "")">@Format(r.Net)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="trend" @onmouseleave="() => hover = null">
+            <svg viewBox="0 0 @W @H" class="trend-svg" role="img" aria-label="@AriaLabel" preserveAspectRatio="none">
+                @foreach (var t in Ticks)
+                {
+                    <line x1="@Left" x2="@W" y1="@F(Y(t))" y2="@F(Y(t))" stroke="@(t == 0 ? ChartColors.Axis : ChartColors.Grid)" stroke-width="1" vector-effect="non-scaling-stroke" />
+                }
+
+                @for (var i = 0; i < Rows.Count; i++)
+                {
+                    var idx = i;
+                    var r = Rows[i];
+                    var cx = Left + Slot * (i + 0.5);
+                    var dim = hover != null && hover != idx ? 0.55 : 1;
+                    <rect x="@F(Left + Slot * i)" y="0" width="@F(Slot)" height="@Base" fill="@(hover == idx ? "rgba(42,120,214,0.06)" : "transparent")"
+                          @onmouseenter="() => hover = idx" />
+                    @if (Zero - Y((double)r.CashIn) > 0.5)
+                    {
+                        <path d="@Bar(cx, Y((double)r.CashIn), true)" fill="@InColor" opacity="@F(dim)" pointer-events="none" />
+                    }
+                    @if (Y(-(double)r.CashOut) - Zero > 0.5)
+                    {
+                        <path d="@Bar(cx, Y(-(double)r.CashOut), false)" fill="@OutColor" opacity="@F(dim)" pointer-events="none" />
+                    }
+                }
+            </svg>
+
+            @foreach (var t in Ticks)
+            {
+                <div class="trend-tick" style="top:@Pct(Y(t), H)">@Compact(Math.Abs(t))</div>
+            }
+
+            <div class="trend-xlabels" style="left:@Pct(Left, W)">
+                @for (var i = 0; i < Rows.Count; i++)
+                {
+                    <span style="width:@Pct(Slot, W - Left)">@(i % LabelStep == 0 ? Rows[i].Label : "")</span>
+                }
+            </div>
+
+            @if (hover is int hv && hv < Rows.Count)
+            {
+                var r = Rows[hv];
+                <div class="trend-tip" style="left:@Pct(Left + Slot * (hv + 0.5), W)">
+                    <div class="fw-semibold">@r.Label</div>
+                    <div><span class="viz-swatch" style="background:@InColor"></span> Cash in <strong>@Format(r.CashIn)</strong></div>
+                    <div><span class="viz-swatch" style="background:@OutColor"></span> Cash out <strong>@Format(r.CashOut)</strong></div>
+                    <div class="@(r.Net < 0 ? "text-danger" : "text-muted")">Net @Format(r.Net)</div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<CashFlowRow> Rows { get; set; } = new();
+    [Parameter] public Func<decimal, string>? ValueFormat { get; set; }
+    [Parameter] public string AriaLabel { get; set; } = "Cash in ar cash out";
+
+    private static readonly string InColor = ChartColors.Categorical[0];
+    private static readonly string OutColor = ChartColors.Categorical[1];
+
+    private const double W = 700;
+    private const double H = 260;
+    private const double Left = 46;
+    private const double Base = 234;   // niche x label
+    private const double TopPad = 10;
+
+    private bool table;
+    private int? hover;
+
+    private double Slot => (W - Left) / Math.Max(1, Rows.Count);
+    private double BarW => Math.Min(16, Slot * 0.6);
+    private int LabelStep => Rows.Count <= 7 ? 1 : (int)Math.Ceiling(Rows.Count / 6.0);
+
+    // Upore in, niche out - dui dike same scale
+    private double NiceMax
+    {
+        get
+        {
+            var max = (double)(Rows.Count == 0 ? 0 : Math.Max(Rows.Max(r => r.CashIn), Rows.Max(r => r.CashOut)));
+            if (max <= 0) return 100;
+            var mag = Math.Pow(10, Math.Floor(Math.Log10(max)));
+            foreach (var m in new[] { 1, 2, 2.5, 5, 10 })
+                if (m * mag >= max) return m * mag;
+            return 10 * mag;
+        }
+    }
+
+    private IEnumerable<double> Ticks => new[] { NiceMax, NiceMax / 2, 0, -NiceMax / 2, -NiceMax };
+
+    private double Zero => (TopPad + Base) / 2;
+
+    private double Y(double v) => Zero - (Zero - TopPad) * (v / NiceMax);
+
+    // 0 line e square, baire 4px round
+    private string Bar(double cx, double end, bool up)
+    {
+        var x = cx - BarW / 2;
+        var h = Math.Abs(end - Zero);
+        var r = Math.Min(4, Math.Min(BarW / 2, h));
+        return up
+            ? $"M{F(x)},{F(Zero)} V{F(end + r)} Q{F(x)},{F(end)} {F(x + r)},{F(end)} H{F(x + BarW - r)} Q{F(x + BarW)},{F(end)} {F(x + BarW)},{F(end + r)} V{F(Zero)} Z"
+            : $"M{F(x)},{F(Zero)} V{F(end - r)} Q{F(x)},{F(end)} {F(x + r)},{F(end)} H{F(x + BarW - r)} Q{F(x + BarW)},{F(end)} {F(x + BarW)},{F(end - r)} V{F(Zero)} Z";
+    }
+
+    private static string F(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string Pct(double v, double of) => (v / of * 100).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "%";
+
+    private static string Compact(double v) => v switch
+    {
+        >= 10_000_000 => $"{v / 10_000_000:0.#}Cr",
+        >= 100_000 => $"{v / 100_000:0.#}L",
+        >= 1_000 => $"{v / 1_000:0.#}K",
+        _ => v.ToString("0")
+    };
+
+    private string Format(decimal value) => ValueFormat?.Invoke(value) ?? value.ToString("N0");
+}

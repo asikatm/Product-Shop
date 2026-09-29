@@ -1,0 +1,366 @@
+@page "/finance/accounts"
+@attribute [RequirePermission(Perms.AccountsView)]
+@inject FinanceService Finance
+@inject AuthState Auth
+@inject IJSRuntime JS
+
+<PageTitle>Accounts & Bank</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1 class="h3">Accounts & Bank</h1>
+        <div class="page-sub">Cash box, bank account, bKash / Nagad - kothay koto taka ache.</div>
+    </div>
+    <div class="d-flex gap-2">
+        @if (Auth.Can(Perms.TxnAdd) && accounts?.Count(a => a.IsActive) >= 2)
+        {
+            <button class="btn btn-outline-secondary" @onclick="StartTransfer"><i class="bi bi-arrow-left-right me-1"></i>Transfer</button>
+        }
+        @if (Auth.Can(Perms.AccountsAdd))
+        {
+            <button class="btn btn-primary" @onclick="StartAdd"><i class="bi bi-plus-lg me-1"></i>Add account</button>
+        }
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger d-flex gap-2"><i class="bi bi-exclamation-triangle-fill"></i><span>@error</span></div>
+}
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-success d-flex gap-2"><i class="bi bi-check-circle-fill"></i><span>@message</span></div>
+}
+
+@if (accounts == null)
+{
+    @if (string.IsNullOrEmpty(error))
+    {
+        <div class="loading">Loading...</div>
+    }
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-wallet2" Tone="primary" Label="Mot balance" Value="@Fmt.Money(Active.Sum(a => a.Balance))">@Active.Count() ta active account</StatCard></div>
+        @foreach (var type in AccountTypes.All)
+        {
+            <div class="col-6 col-xl-3">
+                <StatCard Icon="@AccountTypes.Icon(type)" Tone="@TypeTone(type)" Label="@type" Value="@Fmt.Money(Active.Where(a => a.Type == type).Sum(a => a.Balance))">
+                    @Active.Count(a => a.Type == type) ta account
+                </StatCard>
+            </div>
+        }
+    </div>
+
+    <div class="row g-3">
+        @foreach (var a in accounts)
+        {
+            <div class="col-md-6 col-xl-4">
+                <div class="card h-100 fin-account @(a.IsActive ? "" : "opacity-50")">
+                    <div class="card-body">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="stat-icon tone-@TypeTone(a.Type)"><i class="bi @AccountTypes.Icon(a.Type)"></i></div>
+                            <div class="min-w-0 me-auto">
+                                <div class="fw-semibold text-truncate">@a.Name</div>
+                                <div class="small text-muted">
+                                    @a.Type@(a.BankName != null ? $" · {a.BankName}" : "")
+                                    @if (!a.IsActive) { <span class="badge bg-secondary-subtle text-secondary-emphasis ms-1">Inactive</span> }
+                                </div>
+                            </div>
+                            @if (Auth.Can(Perms.AccountsEdit, Perms.AccountsDelete))
+                            {
+                                <div class="d-flex gap-1">
+                                    @if (Auth.Can(Perms.AccountsEdit)) { <button class="btn btn-sm btn-light border" title="Edit" @onclick="() => StartEdit(a)"><i class="bi bi-pencil"></i></button> }
+                                    @if (Auth.Can(Perms.AccountsDelete)) { <button class="btn btn-sm btn-light border text-danger" title="Delete" disabled="@busy" @onclick="() => DeleteAsync(a)"><i class="bi bi-trash"></i></button> }
+                                </div>
+                            }
+                        </div>
+                        <div class="fin-balance @(a.Balance < 0 ? "text-danger" : "")">@Fmt.Money(a.Balance)</div>
+                        <div class="small text-muted d-flex flex-wrap gap-3">
+                            @if (a.AccountNo != null) { <span><i class="bi bi-hash"></i>@a.AccountNo</span> }
+                            @if (a.Branch != null) { <span><i class="bi bi-geo-alt me-1"></i>@a.Branch</span> }
+                            <span>Opening @Fmt.Money(a.OpeningBalance)</span>
+                        </div>
+                        @if (Auth.Can(Perms.TxnView))
+                        {
+                            <a class="small d-inline-block mt-2" href="finance/transactions?account=@a.Id">Lenden dekhun <i class="bi bi-arrow-right"></i></a>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@* ---------- Account add / edit ---------- *@
+@if (form != null)
+{
+    <div class="ui-modal-backdrop" @onclick="() => form = null"></div>
+    <div class="ui-modal" role="dialog" aria-modal="true">
+        <div class="ui-modal-head">
+            <h2 class="h5 mb-0">@(form.Id == 0 ? "Add account" : "Edit account")</h2>
+            <button class="btn btn-sm btn-link text-muted" title="Close" @onclick="() => form = null"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <EditForm Model="form" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+            <div class="ui-modal-body">
+                @if (!string.IsNullOrEmpty(formError))
+                {
+                    <div class="alert alert-danger py-2 small">@formError</div>
+                }
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label">Type</label>
+                        <div class="row g-2">
+                            @foreach (var type in AccountTypes.All)
+                            {
+                                <div class="col-4">
+                                    <button type="button" class="cf-type @(form.Type == type ? "active" : "")" @onclick="() => form.Type = type">
+                                        <i class="bi @AccountTypes.Icon(type)"></i><span class="cf-type-name">@type</span>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Account er naam <span class="text-danger">*</span></label>
+                        <InputText class="form-control" @bind-Value="form.Name" placeholder="@NamePlaceholder" />
+                        <ValidationMessage For="() => form.Name" />
+                    </div>
+                    @if (form.Type != AccountTypes.Cash)
+                    {
+                        <div class="col-sm-6">
+                            <label class="form-label">@(form.Type == AccountTypes.Bank ? "Bank" : "Provider")</label>
+                            <InputText class="form-control" @bind-Value="form.BankName" list="bank-names" placeholder="@(form.Type == AccountTypes.Bank ? "Dutch-Bangla Bank" : "bKash")" />
+                            <datalist id="bank-names">
+                                @foreach (var b in form.Type == AccountTypes.Bank ? Banks : Wallets)
+                                {
+                                    <option value="@b"></option>
+                                }
+                            </datalist>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label">@(form.Type == AccountTypes.Bank ? "Account no" : "Mobile no")</label>
+                            <InputText class="form-control" @bind-Value="form.AccountNo" />
+                        </div>
+                        @if (form.Type == AccountTypes.Bank)
+                        {
+                            <div class="col-12">
+                                <label class="form-label">Branch</label>
+                                <InputText class="form-control" @bind-Value="form.Branch" />
+                            </div>
+                        }
+                    }
+                    <div class="col-sm-6">
+                        <label class="form-label">Opening balance</label>
+                        <InputNumber class="form-control text-end" @bind-Value="form.OpeningBalance" />
+                        <div class="pf-hint">Software e shuru korar din koto chilo</div>
+                    </div>
+                    <div class="col-sm-6 d-flex align-items-center">
+                        <div class="form-check form-switch mt-3">
+                            <InputCheckbox class="form-check-input" id="acc-active" @bind-Value="form.IsActive" />
+                            <label class="form-check-label" for="acc-active">Active</label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Note</label>
+                        <InputText class="form-control" @bind-Value="form.Note" />
+                    </div>
+                </div>
+            </div>
+            <div class="ui-modal-foot">
+                <button type="button" class="btn btn-light border" @onclick="() => form = null">Cancel</button>
+                <button type="submit" class="btn btn-primary px-3" disabled="@busy"><i class="bi bi-check2 me-1"></i>@(busy ? "Saving..." : "Save")</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@* ---------- Transfer ---------- *@
+@if (transfer != null)
+{
+    <div class="ui-modal-backdrop" @onclick="() => transfer = null"></div>
+    <div class="ui-modal" role="dialog" aria-modal="true">
+        <div class="ui-modal-head">
+            <h2 class="h5 mb-0"><i class="bi bi-arrow-left-right me-2"></i>Account theke account e taka</h2>
+            <button class="btn btn-sm btn-link text-muted" title="Close" @onclick="() => transfer = null"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <EditForm Model="transfer" OnValidSubmit="TransferAsync">
+            <DataAnnotationsValidator />
+            <div class="ui-modal-body">
+                @if (!string.IsNullOrEmpty(formError))
+                {
+                    <div class="alert alert-danger py-2 small">@formError</div>
+                }
+                <div class="row g-3">
+                    <div class="col-sm-6">
+                        <label class="form-label">Theke</label>
+                        <InputSelect class="form-select" @bind-Value="transfer.AccountId">
+                            <option value="0">-- Select --</option>
+                            @foreach (var a in Active)
+                            {
+                                <option value="@a.Id">@a.Name (@Fmt.Money(a.Balance))</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => transfer.AccountId" />
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label">E</label>
+                        <InputSelect class="form-select" @bind-Value="transfer.ToAccountId">
+                            <option value="">-- Select --</option>
+                            @foreach (var a in Active.Where(a => a.Id != transfer.AccountId))
+                            {
+                                <option value="@a.Id">@a.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label">Taka <span class="text-danger">*</span></label>
+                        <InputNumber class="form-control text-end" @bind-Value="transfer.Amount" />
+                        <ValidationMessage For="() => transfer.Amount" />
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label">Date</label>
+                        <InputDate class="form-control" @bind-Value="transfer.Date" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Note / Reference</label>
+                        <InputText class="form-control" @bind-Value="transfer.Note" placeholder="Jemon: bank e cash deposit" />
+                    </div>
+                </div>
+            </div>
+            <div class="ui-modal-foot">
+                <button type="button" class="btn btn-light border" @onclick="() => transfer = null">Cancel</button>
+                <button type="submit" class="btn btn-primary px-3" disabled="@busy"><i class="bi bi-check2 me-1"></i>@(busy ? "Saving..." : "Transfer")</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@code {
+    private static readonly string[] Banks = { "Dutch-Bangla Bank", "BRAC Bank", "Islami Bank", "City Bank", "Eastern Bank", "Sonali Bank", "Pubali Bank", "Mutual Trust Bank" };
+    private static readonly string[] Wallets = { "bKash", "Nagad", "Rocket", "Upay" };
+
+    private List<FinanceAccount>? accounts;
+    private FinanceAccount? form;
+    private FinanceTransaction? transfer;
+    private string? error, message, formError;
+    private bool busy;
+
+    private IEnumerable<FinanceAccount> Active => accounts?.Where(a => a.IsActive) ?? Enumerable.Empty<FinanceAccount>();
+
+    private string NamePlaceholder => form?.Type switch
+    {
+        AccountTypes.Bank => "DBBL - Current",
+        AccountTypes.Mobile => "bKash Merchant",
+        _ => "Cash in hand"
+    };
+
+    private static string TypeTone(string type) => type switch
+    {
+        AccountTypes.Bank => "info",
+        AccountTypes.Mobile => "pink",
+        _ => "success"
+    };
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            accounts = await Finance.GetAccountsAsync();
+        }
+        catch (Exception ex)
+        {
+            error = "Data ana jay nai: " + ex.Message;
+        }
+    }
+
+    private void StartAdd()
+    {
+        formError = null;
+        form = new FinanceAccount();
+    }
+
+    private void StartEdit(FinanceAccount a)
+    {
+        formError = null;
+        form = new FinanceAccount
+        {
+            Id = a.Id, Name = a.Name, Type = a.Type, BankName = a.BankName, AccountNo = a.AccountNo, Branch = a.Branch,
+            OpeningBalance = a.OpeningBalance, IsActive = a.IsActive, Note = a.Note
+        };
+    }
+
+    private void StartTransfer()
+    {
+        formError = null;
+        transfer = new FinanceTransaction { Type = TxnTypes.Transfer, Category = "Transfer", AccountId = Active.First().Id };
+    }
+
+    private async Task SaveAsync()
+    {
+        busy = true;
+        formError = null;
+        try
+        {
+            await Finance.SaveAccountAsync(form!);
+            message = $"'{form!.Name}' save hoyeche.";
+            form = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            formError = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task TransferAsync()
+    {
+        busy = true;
+        formError = null;
+        try
+        {
+            await Finance.SaveTransactionAsync(transfer!);
+            message = $"{Fmt.Money(transfer!.Amount)} transfer hoyeche.";
+            transfer = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            formError = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task DeleteAsync(FinanceAccount a)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"'{a.Name}' account delete korben?")) return;
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await Finance.DeleteAccountAsync(a.Id);
+            message = $"'{a.Name}' delete hoyeche.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

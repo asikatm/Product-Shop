@@ -48,8 +48,87 @@ public class WebOrdersController : ControllerBase
         return order;
     }
 
+    // GET: api/weborders/variants  -> order edit e product khuje add korar jonno
+    [HttpGet("variants")]
+    [Permission(Perms.WebOrdersEdit)]
+    public async Task<List<OrderVariantOption>> Variants()
+    {
+        var products = await _db.Products.AsNoTracking()
+            .Where(p => p.Status == ProductStatus.Active && p.Variants.Any())
+            .Include(p => p.Variants)
+            .Include(p => p.Images.OrderBy(i => i.SortOrder))
+            .AsSplitQuery()
+            .OrderBy(p => p.Name)
+            .ToListAsync();
+
+        return products.SelectMany(p => p.Variants.OrderBy(v => v.Id).Select(v => new OrderVariantOption
+        {
+            VariantId = v.Id, ProductId = p.Id, ProductName = p.Name, Code = p.Code, Label = v.Label, Sku = v.Sku,
+            Price = p.PriceAfterDiscount(v.Price), Stock = v.Quantity, Image = p.Images.Select(i => i.Url).FirstOrDefault()
+        })).ToList();
+    }
+
+    // PUT: api/weborders/5
+    // Confirm er age: qty / dam bodlano, notun product add / bad, discount, delivery charge, advance
+    [HttpPut("{id:int}")]
+    [Permission(Perms.WebOrdersEdit)]
+    public async Task<ActionResult<WebOrder>> Update(int id, WebOrderUpdateRequest request)
+    {
+        var order = await _db.WebOrders.Include(o => o.Items).FirstOrDefaultAsync(o => o.Id == id);
+        if (order == null) return NotFound();
+        if (order.Status != WebOrderStatus.Pending) return BadRequest("Shudhu Pending order bodlano jay.");
+
+        var phone = PhoneHelper.Normalize(request.Phone);
+        if (phone == null) return BadRequest("Phone number thik nai. 01XXXXXXXXX (11 digit) hote hobe.");
+        if (request.Items.Count == 0) return BadRequest("Kompokkhe ekta product rakhun.");
+        if (request.Items.Any(i => i.Quantity <= 0 || i.Quantity > 1000)) return BadRequest("Quantity 1 - 1000 er moddhe hote hobe.");
+        if (request.Items.Any(i => i.UnitPrice < 0)) return BadRequest("Dam negative hote parbe na.");
+
+        // Same size/color duibar dile ek line e jog
+        var lines = request.Items.GroupBy(i => i.VariantId)
+            .Select(g => new WebOrderLine { VariantId = g.Key, Quantity = g.Sum(x => x.Quantity), UnitPrice = g.First().UnitPrice })
+            .ToList();
+        var ids = lines.Select(l => l.VariantId).ToList();
+        var variants = await _db.ProductVariants.Where(v => ids.Contains(v.Id)).ToDictionaryAsync(v => v.Id);
+        if (variants.Count != ids.Count) return BadRequest("Kichu product pawa jay nai.");
+        var productIds = variants.Values.Select(v => v.ProductId).Distinct().ToList();
+        var names = await _db.Products.Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Name);
+
+        var items = lines.Select(l =>
+        {
+            var v = variants[l.VariantId];
+            return new WebOrderItem
+            {
+                ProductId = v.ProductId, ProductVariantId = v.Id, ProductName = names[v.ProductId], VariantName = v.Label,
+                Quantity = l.Quantity, UnitPrice = l.UnitPrice, Total = l.Quantity * l.UnitPrice
+            };
+        }).ToList();
+
+        var subTotal = items.Sum(i => i.Total);
+        if (request.Discount < 0 || request.Discount > subTotal) return BadRequest("Discount 0 theke sub total er moddhe hote hobe.");
+        if (request.DeliveryCharge < 0) return BadRequest("Delivery charge negative hote parbe na.");
+        var total = subTotal - request.Discount + request.DeliveryCharge;
+        if (request.Advance < 0 || request.Advance > total) return BadRequest("Advance 0 theke grand total er moddhe hote hobe.");
+
+        _db.WebOrderItems.RemoveRange(order.Items);
+        order.Items = items;
+        order.CustomerName = request.CustomerName.Trim();
+        order.Phone = phone;
+        order.Address = request.Address.Trim();
+        order.Note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
+        order.SubTotal = subTotal;
+        order.Discount = request.Discount;
+        order.DeliveryCharge = request.DeliveryCharge;
+        order.Total = total;
+        order.Advance = request.Advance;
+        order.HandledBy = User.DisplayName();
+        order.UpdatedAt = DateTime.Now;
+        await _db.SaveChangesAsync();
+        return order;
+    }
+
     // POST: api/weborders/5/confirm
-    // Sale (invoice) toiri hoy, stock kome, customer save hoy. Taka COD - pore deliver e joma.
+    // Sale (invoice) toiri hoy, stock kome, customer save hoy. Advance paid, baki COD - deliver e joma.
     [HttpPost("{id:int}/confirm")]
     [Permission(Perms.WebOrdersEdit)]
     public async Task<ActionResult<WebOrder>> Confirm(int id)
@@ -63,8 +142,11 @@ public class WebOrdersController : ControllerBase
             SaleDate = DateTime.Today,
             CustomerName = order.CustomerName,
             CustomerPhone = order.Phone,
-            Note = $"Web order {order.OrderNo} · {order.Address}" + (order.Note != null ? $" · {order.Note}" : ""),
-            PaidAmount = 0,
+            Note = $"Web order {order.OrderNo} · {order.Address}" + (order.Note != null ? $" · {order.Note}" : "")
+                 + (order.Advance > 0 ? $" · Advance {order.Advance:N0}" : ""),
+            Discount = order.Discount,
+            DeliveryCharge = order.DeliveryCharge,
+            PaidAmount = order.Advance,
             Items = order.Items.Select(i => new SaleItem { ProductVariantId = i.ProductVariantId, Quantity = i.Quantity, UnitPrice = i.UnitPrice }).ToList()
         };
 
@@ -115,6 +197,7 @@ public class WebOrdersController : ControllerBase
         }
 
         order.Status = WebOrderStatus.Delivered;
+        order.DeliveredAt = DateTime.Now;
         order.HandledBy = User.DisplayName();
         order.UpdatedAt = DateTime.Now;
         await _db.SaveChangesAsync();

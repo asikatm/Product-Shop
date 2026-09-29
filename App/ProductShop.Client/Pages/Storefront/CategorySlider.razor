@@ -1,0 +1,154 @@
+@implements IDisposable
+@inject StoreService Store
+
+@* Bahari style gol chobir category slider - nije nije ghore, loop kore *@
+@if (items.Count > 0)
+{
+    <section class="st-cat-slider">
+        <h2 class="st-cat-title">প্রোডাক্ট ক্যাটাগরী সমূহ</h2>
+
+        <div class="st-cs-frame" @onmouseenter="() => paused = true" @onmouseleave="() => paused = false"
+             @ontouchstart="TouchStart" @ontouchend="TouchEnd">
+            @if (CanSlide)
+            {
+                <button class="st-cs-arrow prev" aria-label="আগের" @onclick="PrevAsync"><i class="bi bi-chevron-left"></i></button>
+            }
+            <div class="st-cs-viewport">
+                <div class="st-cs-track @(animate ? "" : "no-anim")" style="--i:@index">
+                    @for (var r = 0; r < repeats; r++)
+                    {
+                        foreach (var c in items)
+                        {
+                            <a class="st-cs-item" href="@c.Href" aria-hidden="@(r > 0 ? "true" : null)" tabindex="@(r > 0 ? "-1" : null)">
+                                <span class="st-cs-card">
+                                    <span class="st-cs-img">
+                                        @if (c.Image != null)
+                                        {
+                                            <img src="@Store.ImageUrl(c.Image)" alt="@c.Name" loading="lazy" />
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-bag-heart"></i>
+                                        }
+                                    </span>
+                                    <span class="st-cs-name">@c.Name</span>
+                                    <span class="st-cs-count">@c.Count টি পণ্য</span>
+                                </span>
+                            </a>
+                        }
+                    }
+                </div>
+            </div>
+            @if (CanSlide)
+            {
+                <button class="st-cs-arrow next" aria-label="পরের" @onclick="NextAsync"><i class="bi bi-chevron-right"></i></button>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    // "Sob sari" tile er jonno - category gulor chobi baade prothom ta
+    [Parameter] public List<string>? AllImages { get; set; }
+    [Parameter] public int AllCount { get; set; }
+
+    private record Item(string Name, string Href, string? Image, int Count);
+
+    private List<Item> items = new();
+    private int index, repeats = 1;
+    private bool animate = true, paused, busy;
+    private double touchX;
+    private readonly CancellationTokenSource cts = new();
+
+    private bool CanSlide => items.Count > 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var cats = await Store.GetCategoriesAsync();
+            items = cats.Select(c => new Item(c.Name, $"shop/category/{c.Id}", c.Image, c.ProductCount)).ToList();
+            var used = cats.Select(c => c.Image).ToHashSet();
+            var allImage = AllImages?.FirstOrDefault(i => !used.Contains(i)) ?? AllImages?.FirstOrDefault() ?? cats.FirstOrDefault()?.Image;
+            items.Insert(0, new Item("সব শাড়ি", "shop", allImage,AllCount > 0 ? AllCount : cats.Sum(c => c.ProductCount)));
+        }
+        catch (Exception)
+        {
+            items = new();
+        }
+
+        // Boro screen e 6 ta dekhay - loop er jonno list ta koyekbar pore pore boshano
+        repeats = CanSlide ? Math.Max(2, (int)Math.Ceiling((items.Count + 6.0) / items.Count)) : 1;
+        if (CanSlide) _ = AutoPlayAsync();
+    }
+
+    private async Task AutoPlayAsync()
+    {
+        try
+        {
+            while (!cts.IsCancellationRequested)
+            {
+                await Task.Delay(3000, cts.Token);
+                if (!paused) await NextAsync();
+            }
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private async Task NextAsync()
+    {
+        if (busy) return;
+        busy = true;
+        index++;
+        StateHasChanged();
+        if (index >= items.Count)
+        {
+            // Animation shesh hole chupchap shuru te fire jay - dekhe mone hoy ghurte e thake
+            await Task.Delay(650);
+            await JumpAsync(0);
+        }
+        busy = false;
+    }
+
+    private async Task PrevAsync()
+    {
+        if (busy) return;
+        busy = true;
+        if (index == 0) await JumpAsync(items.Count);
+        index--;
+        StateHasChanged();
+        await Task.Delay(650);
+        busy = false;
+    }
+
+    private async Task JumpAsync(int to)
+    {
+        animate = false;
+        index = to;
+        StateHasChanged();
+        await Task.Delay(40);
+        animate = true;
+        StateHasChanged();
+        await Task.Delay(20);
+    }
+
+    private void TouchStart(TouchEventArgs e)
+    {
+        paused = true;
+        touchX = e.ChangedTouches.FirstOrDefault()?.ClientX ?? 0;
+    }
+
+    private async Task TouchEnd(TouchEventArgs e)
+    {
+        var dx = (e.ChangedTouches.FirstOrDefault()?.ClientX ?? touchX) - touchX;
+        if (dx < -40) await NextAsync();
+        else if (dx > 40) await PrevAsync();
+        paused = false;
+    }
+
+    public void Dispose()
+    {
+        cts.Cancel();
+        cts.Dispose();
+    }
+}

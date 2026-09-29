@@ -48,6 +48,26 @@ public static class Perms
     public const string RolesAdd = "roles.add";
     public const string RolesEdit = "roles.edit";
     public const string RolesDelete = "roles.delete";
+    public const string FinanceView = "finance.view";
+    public const string AccountsView = "accounts.view";
+    public const string AccountsAdd = "accounts.add";
+    public const string AccountsEdit = "accounts.edit";
+    public const string AccountsDelete = "accounts.delete";
+    public const string TxnView = "transactions.view";
+    public const string TxnAdd = "transactions.add";
+    public const string TxnEdit = "transactions.edit";
+    public const string TxnDelete = "transactions.delete";
+    public const string CourierView = "courier.view";
+    public const string CourierAdd = "courier.add";
+    public const string CourierDelete = "courier.delete";
+    public const string CashFlowView = "cashflow.view";
+    public const string AssetsView = "assets.view";
+    public const string AssetsAdd = "assets.add";
+    public const string AssetsEdit = "assets.edit";
+    public const string AssetsDelete = "assets.delete";
+
+    // Account er list (dropdown) jara Finance er jekono page e kaaj kore tader lage
+    public static readonly string[] AnyFinance = { FinanceView, AccountsView, TxnView, TxnAdd, CourierView, CourierAdd, CashFlowView, AssetsView, AssetsAdd };
 
     // Notun Salesman role er default permission
     public static readonly string[] SalesmanDefaults =
@@ -69,6 +89,12 @@ public static class AppMenus
     public const string CostPrice = "cost";
     public const string Users = "users";
     public const string Roles = "roles";
+    public const string Finance = "finance";
+    public const string Accounts = "accounts";
+    public const string Transactions = "transactions";
+    public const string Courier = "courier";
+    public const string CashFlow = "cashflow";
+    public const string Assets = "assets";
 
     public static readonly AppMenu[] All =
     {
@@ -80,6 +106,12 @@ public static class AppMenus
         new(Stock, "Stock In", "Inventory", "bi-truck", "Supplier theke mal entry", PermAction.View, PermAction.Add, PermAction.Delete),
         new(Catalog, "Category / Brand", "Inventory", "bi-tags", "Category, brand, shop, supplier list", PermAction.View, PermAction.Add, PermAction.Edit, PermAction.Delete),
         new(CostPrice, "Kena dam & profit", "Inventory", "bi-eye", "Kena dam, profit, stock value dekha", PermAction.View),
+        new(Finance, "Finance Dashboard", "Finance", "bi-speedometer2", "Balance, aay-bey, net profit ek nojore", PermAction.View),
+        new(Accounts, "Accounts & Bank", "Finance", "bi-bank", "Cash, bank, bKash account; Edit = transfer", PermAction.View, PermAction.Add, PermAction.Edit, PermAction.Delete),
+        new(Transactions, "Income & Expense", "Finance", "bi-arrow-left-right", "Aay ar khoroch er entry", PermAction.View, PermAction.Add, PermAction.Edit, PermAction.Delete),
+        new(Courier, "Courier Settlement", "Finance", "bi-truck", "Courier theke COD er taka bujhe newa", PermAction.View, PermAction.Add, PermAction.Delete),
+        new(CashFlow, "Cash Flow", "Finance", "bi-graph-up", "Din / mash onujayi taka ashlo-gelo", PermAction.View),
+        new(Assets, "Asset Management", "Finance", "bi-pc-display", "Furniture, computer, rack er hisab", PermAction.View, PermAction.Add, PermAction.Edit, PermAction.Delete),
         new(Users, "Users", "Administrative", "bi-person-gear", "User add, approve, role deya", PermAction.View, PermAction.Add, PermAction.Edit, PermAction.Delete),
         new(Roles, "Roles & Menu Permission", "Administrative", "bi-shield-lock", "Role banano ar permission deya", PermAction.View, PermAction.Add, PermAction.Edit, PermAction.Delete)
     };

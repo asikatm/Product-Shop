@@ -28,6 +28,10 @@ public class Sale
 
     public decimal Discount { get; set; }
 
+    // Web order e delivery charge (shop sale e 0)
+    public decimal DeliveryCharge { get; set; }
+
+    // SubTotal - Discount + DeliveryCharge
     public decimal GrandTotal { get; set; }
 
     // Sale er somoy paid + pore joma deya baki

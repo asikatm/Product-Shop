@@ -1,0 +1,187 @@
+@page "/finance"
+@attribute [RequirePermission(Perms.FinanceView)]
+@inject FinanceService Finance
+@inject AuthState Auth
+
+<PageTitle>Finance Dashboard</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1 class="h3">Finance Dashboard</h1>
+        <div class="page-sub">Account balance, aay-bey ar net profit ek nojore.</div>
+    </div>
+    <DateRangePicker From="from" To="to" OnChange="SetRangeAsync" />
+</div>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (s == null)
+{
+    @if (string.IsNullOrEmpty(error))
+    {
+        <div class="loading">Loading...</div>
+    }
+}
+else
+{
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-xl-3">
+            <StatCard Icon="bi-wallet2" Tone="primary" Label="Mot balance (ajke)" Value="@Tk(s.TotalBalance)">
+                @if (Auth.Can(Perms.AccountsView)) { <a href="finance/accounts">@s.AccountBalances.Count ta account</a> } else { <span>@s.AccountBalances.Count ta account</span> }
+            </StatCard>
+        </div>
+        <div class="col-6 col-xl-3">
+            <StatCard Icon="bi-arrow-down-circle" Tone="success" Label="Cash in" Value="@Tk(s.SalesCollection + s.OtherIncome)">
+                Sale @Tk(s.SalesCollection) · Onnano @Tk(s.OtherIncome)
+            </StatCard>
+        </div>
+        <div class="col-6 col-xl-3">
+            <StatCard Icon="bi-arrow-up-circle" Tone="orange" Label="Cash out" Value="@Tk(s.Expense + s.StockPurchase)">
+                Khoroch @Tk(s.Expense) · Mal kena @Tk(s.StockPurchase)
+            </StatCard>
+        </div>
+        <div class="col-6 col-xl-3">
+            @if (s.NetProfit is decimal np)
+            {
+                <StatCard Icon="bi-graph-up-arrow" Tone="purple" Label="Net profit" Value="@Tk(np)" ValueClass="@(np < 0 ? "text-danger" : "")">
+                    Gross @Tk(s.GrossProfit ?? 0) + aay − khoroch
+                </StatCard>
+            }
+            else
+            {
+                <StatCard Icon="bi-graph-up-arrow" Tone="purple" Label="Net cash flow" Value="@Tk(s.NetCashFlow)" ValueClass="@(s.NetCashFlow < 0 ? "text-danger" : "")">
+                    Cash in − cash out
+                </StatCard>
+            }
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-lg-8">
+            <div class="card h-100">
+                <div class="card-header dash-card-head">
+                    <span>Cash in vs cash out</span>
+                    @if (Auth.Can(Perms.CashFlowView)) { <a href="finance/cash-flow" class="small">Cash Flow report</a> }
+                </div>
+                <div class="card-body">
+                    <CashFlowChart Rows="s.Trend" ValueFormat="Tk" AriaLabel="Din onujayi cash in ar cash out" />
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card mb-3">
+                <div class="card-header dash-card-head"><span>Courier theke pawna</span>
+                    @if (Auth.Can(Perms.CourierView)) { <a href="finance/courier" class="small">Settle korun</a> }
+                </div>
+                <div class="card-body">
+                    <div class="fs-4 fw-bold @(s.CourierPendingAmount > 0 ? "text-warning-emphasis" : "")">@Tk(s.CourierPendingAmount)</div>
+                    <div class="small text-muted">@s.CourierPendingOrders ta delivered order er taka ekhono ashe nai</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header dash-card-head"><span>Asset er mullo</span>
+                    @if (Auth.Can(Perms.AssetsView)) { <a href="finance/assets" class="small">Assets</a> }
+                </div>
+                <div class="card-body">
+                    <div class="fs-4 fw-bold">@Tk(s.AssetValue)</div>
+                    <div class="small text-muted">Depreciation bad diye ajker dam</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header dash-card-head"><span>Account balance</span><span class="small text-muted fw-normal">Ajke</span></div>
+                <div class="card-body">
+                    <HBarChart Items="PositiveBalances" Color="@ChartColors.Categorical[2]" ValueFormat="Tk" NameHeader="Account" CountHeader="" ValueHeader="Balance"
+                               AriaLabel="Protiti account e koto taka" />
+                    @if (s.AccountBalances.Any(a => a.Value < 0))
+                    {
+                        <div class="small text-danger mt-2"><i class="bi bi-exclamation-triangle me-1"></i>
+                            Minus balance: @string.Join(", ", s.AccountBalances.Where(a => a.Value < 0).Select(a => $"{a.Name} {Tk(a.Value)}"))
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header dash-card-head"><span>Khoroch er khat</span><span class="small text-muted fw-normal">@Tk(s.Expense)</span></div>
+                <div class="card-body">
+                    <HBarChart Items="s.ExpenseByCategory" Color="@ChartColors.Categorical[1]" ValueFormat="Tk" NameHeader="Khat" CountHeader="Entry" ValueHeader="Taka"
+                               AriaLabel="Khat onujayi khoroch" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header dash-card-head"><span>Shesh lenden</span>
+            @if (Auth.Can(Perms.TxnView)) { <a href="finance/transactions" class="small">Shob dekhun</a> }
+        </div>
+        @if (s.Recent.Count == 0)
+        {
+            <div class="card-body text-muted">Ekhono kono aay / khoroch entry nai.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead><tr><th>Date</th><th>Type</th><th>Khat</th><th>Account</th><th class="text-end">Taka</th></tr></thead>
+                    <tbody>
+                        @foreach (var t in s.Recent)
+                        {
+                            <tr>
+                                <td>@Fmt.Date(t.Date)</td>
+                                <td><TxnBadge Type="@t.Type" /></td>
+                                <td>@t.Category</td>
+                                <td>@t.AccountName@(t.ToAccountName != null ? $" → {t.ToAccountName}" : "")</td>
+                                <td class="text-end fw-semibold @(t.Type == TxnTypes.Expense ? "text-danger" : t.Type == TxnTypes.Income ? "text-success" : "")">@Tk(t.Amount)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private FinanceSummary? s;
+    private string? error;
+    private DateTime from, to;
+
+    private List<NamedValue> PositiveBalances => s!.AccountBalances.Where(a => a.Value > 0).OrderByDescending(a => a.Value).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        (from, to) = DateRangePicker.Range("month");
+        await LoadAsync();
+    }
+
+    private async Task SetRangeAsync((DateTime From, DateTime To) r)
+    {
+        (from, to) = r;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            error = null;
+            s = await Finance.GetSummaryAsync(from, to);
+        }
+        catch (Exception ex)
+        {
+            error = "Data ana jay nai: " + ex.Message;
+        }
+    }
+
+    private static string Tk(decimal v) => (v < 0 ? "-৳" : "৳") + Math.Abs(v).ToString("N0");
+}

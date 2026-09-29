@@ -1,0 +1,147 @@
+﻿@page "/finance/cash-flow"
+@attribute [RequirePermission(Perms.CashFlowView)]
+@inject FinanceService Finance
+
+<PageTitle>Cash Flow</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1 class="h3">Cash Flow</h1>
+        <div class="page-sub">Kon din / mash e koto taka ashlo ar gelo - kothay theke, kothay.</div>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <DateRangePicker From="from" To="to" OnChange="SetRangeAsync" />
+        <div class="btn-group btn-group-sm" role="group" aria-label="Group">
+            <button class="btn @(group == "day" ? "btn-dark" : "btn-outline-secondary")" @onclick="@(() => SetGroupAsync("day"))">Din</button>
+            <button class="btn @(group == "month" ? "btn-dark" : "btn-outline-secondary")" @onclick="@(() => SetGroupAsync("month"))">Mash</button>
+        </div>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (report == null)
+{
+    @if (string.IsNullOrEmpty(error))
+    {
+        <div class="loading">Loading...</div>
+    }
+}
+else
+{
+    var rows = report.Rows;
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-bag-check" Tone="success" Label="Sale collection" Value="@Tk(rows.Sum(r => r.SalesCollection))">Sale + baki joma + COD</StatCard></div>
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-plus-circle" Tone="info" Label="Onnano aay" Value="@Tk(rows.Sum(r => r.OtherIncome))">Income entry</StatCard></div>
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-dash-circle" Tone="orange" Label="Khoroch + mal kena" Value="@Tk(rows.Sum(r => r.CashOut))">Khoroch @Tk(rows.Sum(r => r.Expense)) · Stock @Tk(rows.Sum(r => r.StockPurchase))</StatCard></div>
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-calculator" Tone="purple" Label="Net cash flow" Value="@Tk(rows.Sum(r => r.Net))" ValueClass="@(rows.Sum(r => r.Net) < 0 ? "text-danger" : "")">@Fmt.Date(report.From) – @Fmt.Date(report.To)</StatCard></div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header dash-card-head"><span>Cash in vs cash out</span><span class="small text-muted fw-normal">@(group == "month" ? "Mash onujayi" : "Din onujayi")</span></div>
+        <div class="card-body">
+            <CashFlowChart Rows="rows" ValueFormat="Tk" />
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header dash-card-head">
+            <span>Bistarito</span>
+            <div class="form-check form-switch small mb-0">
+                <input class="form-check-input" type="checkbox" id="cf-empty" @bind="hideEmpty" />
+                <label class="form-check-label" for="cf-empty">Khali din lukan</label>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-sm align-middle mb-0 cf-table">
+                <thead class="table-light">
+                    <tr>
+                        <th>@(group == "month" ? "Mash" : "Date")</th>
+                        <th class="text-end">Sale collection</th>
+                        <th class="text-end">Onnano aay</th>
+                        <th class="text-end">Khoroch</th>
+                        <th class="text-end">Mal kena</th>
+                        <th class="text-end">Net</th>
+                        <th class="text-end">Running</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in rows.Where(r => !hideEmpty || r.CashIn != 0 || r.CashOut != 0))
+                    {
+                        <tr>
+                            <td class="text-nowrap">@(group == "month" ? r.Label : r.Date.ToString("dd MMM, ddd"))</td>
+                            <td class="text-end">@Dash(r.SalesCollection)</td>
+                            <td class="text-end">@Dash(r.OtherIncome)</td>
+                            <td class="text-end">@Dash(r.Expense)</td>
+                            <td class="text-end">@Dash(r.StockPurchase)</td>
+                            <td class="text-end fw-semibold @(r.Net < 0 ? "text-danger" : r.Net > 0 ? "text-success" : "text-muted")">@Tk(r.Net)</td>
+                            <td class="text-end @(r.Running < 0 ? "text-danger" : "")">@Tk(r.Running)</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot class="fw-bold">
+                    <tr>
+                        <td>Mot</td>
+                        <td class="text-end">@Tk(rows.Sum(r => r.SalesCollection))</td>
+                        <td class="text-end">@Tk(rows.Sum(r => r.OtherIncome))</td>
+                        <td class="text-end">@Tk(rows.Sum(r => r.Expense))</td>
+                        <td class="text-end">@Tk(rows.Sum(r => r.StockPurchase))</td>
+                        <td class="text-end @(rows.Sum(r => r.Net) < 0 ? "text-danger" : "")">@Tk(rows.Sum(r => r.Net))</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <div class="card-body border-top pf-hint">
+            <i class="bi bi-info-circle me-1"></i>Courier settlement er COD age-i "Sale collection" e dhora (deliver er somoy), tai shudhu courier charge khoroch e ashe. Transfer (ek account theke arek account) cash flow te dhora hoy na.
+        </div>
+    </div>
+}
+
+@code {
+    private CashFlowReport? report;
+    private string? error;
+    private DateTime from, to;
+    private string group = "day";
+    private bool hideEmpty = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        (from, to) = DateRangePicker.Range("month");
+        await LoadAsync();
+    }
+
+    private async Task SetRangeAsync((DateTime From, DateTime To) r)
+    {
+        (from, to) = r;
+        // 2 mash er beshi hole mash onujayi shohoje pora jay
+        group = (to - from).TotalDays > 62 ? "month" : "day";
+        await LoadAsync();
+    }
+
+    private async Task SetGroupAsync(string g)
+    {
+        group = g;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            error = null;
+            report = await Finance.GetCashFlowAsync(from, to, group);
+        }
+        catch (Exception ex)
+        {
+            error = "Data ana jay nai: " + ex.Message;
+        }
+    }
+
+    private static string Tk(decimal v) => (v < 0 ? "-৳" : "৳") + Math.Abs(v).ToString("N0");
+
+    private static string Dash(decimal v) => v == 0 ? "–" : Tk(v);
+}

@@ -109,6 +109,10 @@ else
                     <table class="table table-sm">
                         <tr><td>Sub Total</td><td class="text-end">@Fmt.Money(sale.SubTotal)</td></tr>
                         <tr><td>Discount</td><td class="text-end">- @Fmt.Money(sale.Discount)</td></tr>
+                        @if (sale.DeliveryCharge > 0)
+                        {
+                            <tr><td>Delivery charge</td><td class="text-end">+ @Fmt.Money(sale.DeliveryCharge)</td></tr>
+                        }
                         <tr class="fw-semibold fs-5"><td>Grand Total</td><td class="text-end">@Fmt.Money(sale.GrandTotal)</td></tr>
                         <tr><td>Paid</td><td class="text-end">@Fmt.Money(sale.PaidAmount)</td></tr>
                         <tr class="@(sale.DueAmount > 0 ? "text-danger fw-semibold" : "")"><td>Due</td><td class="text-end">@Fmt.Money(sale.DueAmount)</td></tr>

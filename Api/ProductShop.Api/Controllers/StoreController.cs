@@ -44,12 +44,23 @@ public class StoreController : ControllerBase
     [HttpGet("categories")]
     public async Task<List<StoreCategory>> Categories()
     {
-        return await _db.Products
-            .Where(p => p.Status == ProductStatus.Active && p.CategoryId != null && p.Variants.Any())
+        var active = _db.Products.Where(p => p.Status == ProductStatus.Active && p.CategoryId != null && p.Variants.Any());
+
+        var list = await active
             .GroupBy(p => new { p.CategoryId, p.Category!.Name })
             .Select(g => new StoreCategory { Id = g.Key.CategoryId!.Value, Name = g.Key.Name, ProductCount = g.Count() })
             .OrderByDescending(c => c.ProductCount)
             .ToListAsync();
+
+        // Protiti category r shobcheye notun chobi-wala product er prothom chobi
+        var images = await active
+            .Where(p => p.Images.Any())
+            .Select(p => new { p.CategoryId, p.Id, Url = p.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).First() })
+            .ToListAsync();
+        foreach (var c in list)
+            c.Image = images.Where(i => i.CategoryId == c.Id).OrderByDescending(i => i.Id).Select(i => i.Url).FirstOrDefault();
+
+        return list;
     }
 
     // GET: api/store/products?categoryId=3&q=jamdani

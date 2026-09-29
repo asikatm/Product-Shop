@@ -52,11 +52,12 @@ public class SaleWriter
         sale.SubTotal = sale.Items.Sum(i => i.Total);
         if (sale.Discount < 0 || sale.Discount > sale.SubTotal) return (null, "Discount 0 theke sub total er moddhe hote hobe.");
         if (sale.PaidAmount < 0) return (null, "Paid amount negative hote parbe na.");
+        if (sale.DeliveryCharge < 0) return (null, "Delivery charge negative hote parbe na.");
 
         sale.Id = 0;
         sale.SaleDate = sale.SaleDate.Date;
         sale.CreatedAt = DateTime.Now;
-        sale.GrandTotal = sale.SubTotal - sale.Discount;
+        sale.GrandTotal = sale.SubTotal - sale.Discount + sale.DeliveryCharge;
         sale.PaidAmount = Math.Min(sale.PaidAmount, sale.GrandTotal);
         sale.DueAmount = sale.GrandTotal - sale.PaidAmount;
         sale.SoldBy = soldBy;

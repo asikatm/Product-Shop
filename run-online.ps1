@@ -57,26 +57,46 @@ for ($i = 0; $i -lt 60 -and -not (Get-NetTCPConnection -LocalPort $Port -State L
 
 # 2. Tunnel: internet theke ei PC er software e link
 $tunnelLog = Join-Path $publish 'tunnel.log'
-if (Test-Path $tunnelLog) { Remove-Item $tunnelLog }
-$tunnel = Start-Process $cloudflared -ArgumentList 'tunnel', '--no-autoupdate', '--url', "http://localhost:$Port" `
-    -PassThru -WindowStyle Hidden -RedirectStandardError $tunnelLog
 
-$url = $null
-for ($i = 0; $i -lt 60 -and -not $url; $i++) {
+function Start-Tunnel {
+    Get-Process cloudflared -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $cloudflared } | Stop-Process -Force
     Start-Sleep 1
-    if (Test-Path $tunnelLog) {
-        $m = Select-String -Path $tunnelLog -Pattern 'https://[a-z0-9-]+\.trycloudflare\.com' | Select-Object -First 1
-        if ($m) { $url = $m.Matches[0].Value }
+    if (Test-Path $tunnelLog) { Remove-Item $tunnelLog }
+    $script:tunnel = Start-Process $cloudflared -ArgumentList 'tunnel', '--no-autoupdate', '--url', "http://localhost:$Port" `
+        -PassThru -WindowStyle Hidden -RedirectStandardError $tunnelLog
+
+    $url = $null
+    for ($i = 0; $i -lt 60 -and -not $url; $i++) {
+        Start-Sleep 1
+        if (Test-Path $tunnelLog) {
+            $m = Select-String -Path $tunnelLog -Pattern 'https://[a-z0-9-]+\.trycloudflare\.com' | Select-Object -First 1
+            if ($m) { $url = $m.Matches[0].Value }
+        }
+    }
+    if (-not $url) { return $null }
+
+    Set-Content $urlFile $url
+    Write-Host ''
+    Write-Host "  [$(Get-Date -Format 'hh:mm tt')] Software online e chalu hoyeche:" -ForegroundColor Green
+    Write-Host "  $url" -ForegroundColor Cyan
+    Write-Host "  (Website: $url/shop)"
+    Write-Host ''
+    return $url
+}
+
+if (-not (Start-Tunnel)) { Stop-Online; throw "Link pawa jay nai. $tunnelLog dekhun (internet ache kina?)." }
+Write-Host '  Ei window khola rakhun. Bondho korte Ctrl+C chapun.'
+Write-Host '  Cloudflare link bondho kore dile nije theke notun link banabe (online-url.txt e thakbe).'
+
+# Quick tunnel kichukkhon por Cloudflare bondho kore dey ("Tunnel not found") - tokhon notun tunnel
+try {
+    while ($true) {
+        Start-Sleep 30
+        $dead = $script:tunnel.HasExited -or (Select-String -Path $tunnelLog -Pattern 'Tunnel not found' -Quiet -ErrorAction SilentlyContinue)
+        if ($dead) {
+            Write-Host '  Link bondho hoye geche, notun link banano hocche...' -ForegroundColor Yellow
+            if (-not (Start-Tunnel)) { Start-Sleep 30 }
+        }
     }
 }
-if (-not $url) { Stop-Online; throw "Link pawa jay nai. $tunnelLog dekhun (internet ache kina?)." }
-
-Set-Content $urlFile $url
-Write-Host ''
-Write-Host '  Software online e chalu hoyeche:' -ForegroundColor Green
-Write-Host "  $url" -ForegroundColor Cyan
-Write-Host ''
-Write-Host '  Ei window khola rakhun. Bondho korte Ctrl+C chapun.'
-
-try { Wait-Process -Id $tunnel.Id }
 finally { Stop-Online }

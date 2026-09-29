@@ -1,6 +1,7 @@
-@page "/web-orders/{Id:int}"
+﻿@page "/web-orders/{Id:int}"
 @attribute [RequirePermission(Perms.WebOrdersView)]
 @inject WebOrderService Orders
+@inject StoreService Store
 @inject AuthState Auth
 @inject IJSRuntime JS
 
@@ -34,14 +35,12 @@ else
         @if (Auth.Can(Perms.WebOrdersEdit))
         {
             <div class="d-flex flex-wrap gap-2">
-                @if (order.Status == WebOrderStatus.Pending)
+                @if (order.Status is WebOrderStatus.Pending or WebOrderStatus.Confirmed)
                 {
                     <button class="btn btn-outline-secondary text-danger" disabled="@busy" @onclick="CancelAsync"><i class="bi bi-x-circle me-1"></i>Cancel</button>
-                    <button class="btn btn-primary px-3" disabled="@busy" @onclick="ConfirmAsync"><i class="bi bi-check2-circle me-1"></i>Confirm order</button>
                 }
                 @if (order.Status == WebOrderStatus.Confirmed)
                 {
-                    <button class="btn btn-outline-secondary text-danger" disabled="@busy" @onclick="CancelAsync"><i class="bi bi-x-circle me-1"></i>Cancel</button>
                     <button class="btn btn-success px-3" disabled="@busy" @onclick="DeliverAsync"><i class="bi bi-truck me-1"></i>Delivered · taka paoa geche</button>
                 }
             </div>
@@ -59,69 +58,270 @@ else
         }
     </div>
 
-    <div class="row g-3">
-        <div class="col-lg-8">
-            <div class="card">
-                <div class="card-header">Products</div>
-                <div class="table-responsive">
-                    <table class="table align-middle mb-0">
-                        <thead><tr><th>Product</th><th>Size / Color</th><th class="text-end">Qty</th><th class="text-end">Dam</th><th class="text-end">Total</th></tr></thead>
-                        <tbody>
-                            @foreach (var i in order.Items)
+    @if (Editing && edit != null)
+    {
+        @* ================= Pending: bodlano jay ================= *@
+        <div class="row g-3">
+            <div class="col-lg-8">
+                <div class="card mb-3">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <span>Products <span class="text-muted fw-normal small">(@edit.Items.Sum(i => i.Quantity) pcs)</span></span>
+                        @if (dirty)
+                        {
+                            <span class="small text-warning-emphasis"><i class="bi bi-pencil-square me-1"></i>Save kora hoy nai</span>
+                        }
+                    </div>
+                    <div class="card-body">
+                        @* Notun product khuje add *@
+                        <div class="wo-add mb-3">
+                            <i class="bi bi-search"></i>
+                            <input class="form-control" placeholder="Product add korun: naam / code / SKU likhun" @bind="query" @bind:event="oninput"
+                                   @onfocus="() => addOpen = true" @onkeydown="OnAddKey" />
+                            @if (addOpen && query.Trim().Length > 0)
                             {
-                                <tr>
-                                    <td>@i.ProductName</td>
-                                    <td>@i.VariantName</td>
-                                    <td class="text-end">@i.Quantity</td>
-                                    <td class="text-end">@Fmt.Money(i.UnitPrice)</td>
-                                    <td class="text-end">@Fmt.Money(i.Total)</td>
-                                </tr>
+                                <div class="app-click-away" @onclick="() => addOpen = false"></div>
+                                <div class="wo-add-results">
+                                    @if (Matches.Count == 0)
+                                    {
+                                        <div class="p-3 small text-muted">"@query" pawa jay nai</div>
+                                    }
+                                    @foreach (var o in Matches)
+                                    {
+                                        <button type="button" class="wo-add-item" @onclick="() => Add(o)">
+                                            <span class="wo-thumb">@if (o.Image != null) { <img src="@Store.ImageUrl(o.Image)" alt="" /> } else { <i class="bi bi-image"></i> }</span>
+                                            <span class="min-w-0 me-auto">
+                                                <span class="d-block text-truncate fw-semibold">@o.ProductName</span>
+                                                <span class="small text-muted">@o.Label@(o.Code != null ? $" · {o.Code}" : "")</span>
+                                            </span>
+                                            <span class="text-end small">
+                                                <span class="d-block fw-semibold">@Fmt.Money(o.Price)</span>
+                                                <span class="@(o.Stock <= 0 ? "text-danger" : "text-muted")">Stock: @o.Stock</span>
+                                            </span>
+                                        </button>
+                                    }
+                                </div>
                             }
-                        </tbody>
-                        <tfoot>
-                            <tr><td colspan="4" class="text-end">Subtotal</td><td class="text-end">@Fmt.Money(order.SubTotal)</td></tr>
-                            <tr><td colspan="4" class="text-end">Delivery charge</td><td class="text-end">@Fmt.Money(order.DeliveryCharge)</td></tr>
-                            <tr class="fw-bold"><td colspan="4" class="text-end">Total (COD)</td><td class="text-end">@Fmt.Money(order.Total)</td></tr>
-                        </tfoot>
-                    </table>
+                        </div>
+
+                        @if (edit.Items.Count == 0)
+                        {
+                            <div class="text-center text-muted py-4"><i class="bi bi-bag-x fs-2 d-block mb-1"></i>Kono product nai - upore theke add korun.</div>
+                        }
+                        @foreach (var line in edit.Items)
+                        {
+                            var opt = Option(line.VariantId);
+                            var over = opt != null && line.Quantity > opt.Stock;
+                            <div class="wo-line @(over ? "over" : "")" @key="line">
+                                <div class="d-flex gap-3">
+                                    <span class="wo-thumb lg">@if (opt?.Image != null) { <img src="@Store.ImageUrl(opt.Image)" alt="" /> } else { <i class="bi bi-image"></i> }</span>
+                                    <div class="min-w-0 me-auto">
+                                        <div class="fw-bold">@(opt?.Code ?? opt?.Sku ?? $"#{line.VariantId}")</div>
+                                        <div class="wo-line-name">@(opt?.ProductName ?? NameOf(line.VariantId)) <span class="text-muted">· @(opt?.Label ?? "")</span></div>
+                                        <div class="small">
+                                            <span class="me-2">@Fmt.Money(opt?.Price ?? line.UnitPrice)</span>
+                                            <span class="@(over ? "text-danger fw-semibold" : "text-muted")">Stock: @(opt?.Stock.ToString() ?? "?")</span>
+                                            @if (over) { <span class="text-danger ms-1">— stock kom, confirm hobe na</span> }
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-sm btn-link text-danger align-self-start" title="Bad din" @onclick="() => Remove(line)"><i class="bi bi-trash3"></i></button>
+                                </div>
+                                <div class="row g-2 mt-1">
+                                    <div class="col-4">
+                                        <label class="wo-mini">Qty</label>
+                                        <div class="wo-stepper">
+                                            <button type="button" @onclick="() => Qty(line, -1)" disabled="@(line.Quantity <= 1)"><i class="bi bi-dash-lg"></i></button>
+                                            <input type="number" min="1" value="@line.Quantity" @onchange="e => SetQty(line, e)" aria-label="Qty" />
+                                            <button type="button" @onclick="() => Qty(line, 1)"><i class="bi bi-plus-lg"></i></button>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <label class="wo-mini">Price</label>
+                                        <div class="wo-stepper">
+                                            <button type="button" @onclick="() => Price(line, -10)" disabled="@(line.UnitPrice <= 0)"><i class="bi bi-dash-lg"></i></button>
+                                            <input type="number" min="0" value="@line.UnitPrice.ToString("0.##")" @onchange="e => SetPrice(line, e)" aria-label="Price" />
+                                            <button type="button" @onclick="() => Price(line, 10)"><i class="bi bi-plus-lg"></i></button>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <label class="wo-mini">Total</label>
+                                        <input class="form-control wo-total" value="@((line.Quantity * line.UnitPrice).ToString("N2"))" readonly tabindex="-1" aria-label="Total" />
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header text-uppercase small fw-semibold text-muted">Order total</div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-sm-4">
+                                <label class="form-label">Discount</label>
+                                <input type="number" min="0" class="form-control" value="@Num(edit.Discount)" @onchange="e => SetMoney(e, v => edit.Discount = v)" />
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="form-label">Advance</label>
+                                <input type="number" min="0" class="form-control" value="@Num(edit.Advance)" @onchange="e => SetMoney(e, v => edit.Advance = v)" placeholder="bKash / Nagad" />
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="form-label">Sub Total</label>
+                                <input class="form-control" value="@SubTotal.ToString("0.##")" readonly tabindex="-1" />
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="form-label">Delivery Charge</label>
+                                <input type="number" min="0" class="form-control" value="@Num(edit.DeliveryCharge)" @onchange="e => SetMoney(e, v => edit.DeliveryCharge = v)" />
+                                <div class="d-flex gap-1 mt-1">
+                                    @foreach (var c in DeliveryPresets)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-light border py-0" @onclick="() => { edit.DeliveryCharge = c; dirty = true; }">@c</button>
+                                    }
+                                </div>
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="form-label text-danger">Grand Total</label>
+                                <input class="form-control wo-grand" value="@GrandTotal.ToString("0.##")" readonly tabindex="-1" />
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="form-label">COD (courier tulbe)</label>
+                                <input class="form-control" value="@Math.Max(0, GrandTotal - edit.Advance).ToString("0.##")" readonly tabindex="-1" />
+                            </div>
+                        </div>
+                        @if (!string.IsNullOrEmpty(formError))
+                        {
+                            <div class="alert alert-danger py-2 small mt-3 mb-0">@formError</div>
+                        }
+                    </div>
+                </div>
+
+                @if (Auth.Can(Perms.WebOrdersEdit))
+                {
+                    <div class="d-flex flex-wrap gap-2 mt-3">
+                        <button class="btn btn-outline-primary" disabled="@(busy || !dirty)" @onclick="SaveAsync"><i class="bi bi-save me-1"></i>Save changes</button>
+                        <button class="btn btn-success btn-lg flex-grow-1 wo-approve" disabled="@(busy || edit.Items.Count == 0)" @onclick="ApproveAsync">
+                            <i class="bi bi-check2-circle me-1"></i>@(busy ? "Please wait..." : $"Approve Order ({GrandTotal:N2}৳)")
+                        </button>
+                    </div>
+                }
+            </div>
+
+            <div class="col-lg-4">
+                <div class="card mb-3">
+                    <div class="card-header">Customer</div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">Naam</label>
+                            <input class="form-control" @bind="edit.CustomerName" @bind:after="Touch" />
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">Mobile</label>
+                            <div class="input-group">
+                                <input class="form-control" type="tel" @bind="edit.Phone" @bind:after="Touch" />
+                                <a class="btn btn-outline-secondary" href="tel:@edit.Phone" title="Call"><i class="bi bi-telephone"></i></a>
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">Thikana</label>
+                            <textarea class="form-control" rows="3" @bind="edit.Address" @bind:after="Touch"></textarea>
+                        </div>
+                        <div>
+                            <label class="form-label small mb-1">Note</label>
+                            <textarea class="form-control" rows="2" @bind="edit.Note" @bind:after="Touch"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-body small text-muted">
+                        <i class="bi bi-info-circle me-1"></i>Customer ke phone kore qty / size mile nin. <strong>Approve</strong> korle invoice toiri hobe, stock kombe, Advance paid hisebe joma hobe ar baki ta COD.
+                        @if (order.HandledBy != null)
+                        {
+                            <div class="mt-2"><strong>Shesh bodlano:</strong> @order.HandledBy</div>
+                        }
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-lg-4">
-            <div class="card mb-3">
-                <div class="card-header">Customer</div>
-                <div class="card-body">
-                    <div class="fw-semibold fs-5">@order.CustomerName</div>
-                    <a class="d-block mb-2" href="tel:@order.Phone"><i class="bi bi-telephone me-1"></i>@PhoneHelper.Pretty(order.Phone)</a>
-                    <div class="small text-muted"><i class="bi bi-geo-alt me-1"></i>@order.Address</div>
-                    @if (order.Note != null)
-                    {
-                        <div class="small mt-2 p-2 rounded" style="background:#fffbeb"><i class="bi bi-chat-left-text me-1"></i>@order.Note</div>
-                    }
+    }
+    else
+    {
+        @* ================= Confirmed / Delivered / Cancelled: shudhu dekha ================= *@
+        <div class="row g-3">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header">Products</div>
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0">
+                            <thead><tr><th>Product</th><th>Size / Color</th><th class="text-end">Qty</th><th class="text-end">Dam</th><th class="text-end">Total</th></tr></thead>
+                            <tbody>
+                                @foreach (var i in order.Items)
+                                {
+                                    <tr>
+                                        <td>@i.ProductName</td>
+                                        <td>@i.VariantName</td>
+                                        <td class="text-end">@i.Quantity</td>
+                                        <td class="text-end">@Fmt.Money(i.UnitPrice)</td>
+                                        <td class="text-end">@Fmt.Money(i.Total)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr><td colspan="4" class="text-end">Subtotal</td><td class="text-end">@Fmt.Money(order.SubTotal)</td></tr>
+                                @if (order.Discount > 0)
+                                {
+                                    <tr><td colspan="4" class="text-end">Discount</td><td class="text-end">− @Fmt.Money(order.Discount)</td></tr>
+                                }
+                                <tr><td colspan="4" class="text-end">Delivery charge</td><td class="text-end">@Fmt.Money(order.DeliveryCharge)</td></tr>
+                                <tr class="fw-bold"><td colspan="4" class="text-end">Grand total</td><td class="text-end">@Fmt.Money(order.Total)</td></tr>
+                                @if (order.Advance > 0)
+                                {
+                                    <tr><td colspan="4" class="text-end">Advance</td><td class="text-end">− @Fmt.Money(order.Advance)</td></tr>
+                                    <tr class="fw-bold"><td colspan="4" class="text-end">COD</td><td class="text-end">@Fmt.Money(order.CodAmount)</td></tr>
+                                }
+                            </tfoot>
+                        </table>
+                    </div>
                 </div>
             </div>
-            <div class="card">
-                <div class="card-body small">
-                    @if (order.InvoiceNo != null && order.SaleId != null)
-                    {
-                        <div class="mb-1"><strong>Invoice:</strong> <a href="sales/@order.SaleId">@order.InvoiceNo</a></div>
-                    }
-                    @if (order.HandledBy != null)
-                    {
-                        <div class="mb-1"><strong>Handled by:</strong> @order.HandledBy</div>
-                    }
-                    @if (order.CancelReason != null)
-                    {
-                        <div class="text-danger"><strong>Cancel er karon:</strong> @order.CancelReason</div>
-                    }
-                    @if (order.Status == WebOrderStatus.Pending)
-                    {
-                        <div class="text-muted"><i class="bi bi-info-circle me-1"></i>Confirm korle invoice toiri hobe, stock kombe ar customer list e jog hobe.</div>
-                    }
+            <div class="col-lg-4">
+                <div class="card mb-3">
+                    <div class="card-header">Customer</div>
+                    <div class="card-body">
+                        <div class="fw-semibold fs-5">@order.CustomerName</div>
+                        <a class="d-block mb-2" href="tel:@order.Phone"><i class="bi bi-telephone me-1"></i>@PhoneHelper.Pretty(order.Phone)</a>
+                        <div class="small text-muted"><i class="bi bi-geo-alt me-1"></i>@order.Address</div>
+                        @if (order.Note != null)
+                        {
+                            <div class="small mt-2 p-2 rounded" style="background:#fffbeb"><i class="bi bi-chat-left-text me-1"></i>@order.Note</div>
+                        }
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-body small">
+                        @if (order.InvoiceNo != null && order.SaleId != null)
+                        {
+                            <div class="mb-1"><strong>Invoice:</strong> <a href="sales/@order.SaleId">@order.InvoiceNo</a></div>
+                        }
+                        @if (order.HandledBy != null)
+                        {
+                            <div class="mb-1"><strong>Handled by:</strong> @order.HandledBy</div>
+                        }
+                        @if (order.DeliveredAt != null)
+                        {
+                            <div class="mb-1"><strong>Delivered:</strong> @Fmt.Date(order.DeliveredAt.Value) @order.DeliveredAt.Value.ToString("h:mm tt")</div>
+                        }
+                        @if (order.Status == WebOrderStatus.Delivered)
+                        {
+                            <div class="mb-1"><strong>Courier:</strong> @(order.CourierSettlementId != null ? "Taka bujhe paoa geche ✓" : "Settle baki")</div>
+                        }
+                        @if (order.CancelReason != null)
+                        {
+                            <div class="text-danger"><strong>Cancel er karon:</strong> @order.CancelReason</div>
+                        }
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    }
 }
 
 @code {
@@ -134,21 +334,177 @@ else
         new("Order ashche", "bi-bag"), new("Confirm", "bi-check2-circle"), new("Delivered", "bi-truck")
     };
 
+    private static readonly decimal[] DeliveryPresets = { 0, 60, 80, 120, 150 };
+
     private WebOrder? order;
+    private WebOrderUpdateRequest? edit;
+    private List<OrderVariantOption> options = new();
+    private Dictionary<int, OrderVariantOption> byId = new();
+    private string query = "";
+    private bool addOpen;
+    private bool dirty;
     private string? error;
     private string? message;
+    private string? formError;
     private bool busy;
+
+    private bool Editing => order?.Status == WebOrderStatus.Pending && Auth.Can(Perms.WebOrdersEdit);
+
+    private decimal SubTotal => edit?.Items.Sum(i => i.Quantity * i.UnitPrice) ?? 0;
+    private decimal GrandTotal => SubTotal - (edit?.Discount ?? 0) + (edit?.DeliveryCharge ?? 0);
+
+    // Naam, code, SKU, size / color - shob shobdo mille
+    private List<OrderVariantOption> Matches
+    {
+        get
+        {
+            var words = query.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return options.Where(o => words.All(w =>
+                    o.ProductName.Contains(w, StringComparison.OrdinalIgnoreCase)
+                    || o.Label.Contains(w, StringComparison.OrdinalIgnoreCase)
+                    || (o.Code?.Contains(w, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (o.Sku?.Contains(w, StringComparison.OrdinalIgnoreCase) ?? false)))
+                .OrderByDescending(o => o.Stock > 0)
+                .Take(8)
+                .ToList();
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
         try
         {
             order = await Orders.GetByIdAsync(Id);
+            if (Editing)
+            {
+                options = await Orders.GetVariantsAsync();
+                byId = options.ToDictionary(o => o.VariantId);
+                StartEdit();
+            }
         }
         catch (Exception ex)
         {
             error = "Order pawa jay nai: " + ex.Message;
         }
+    }
+
+    private void StartEdit()
+    {
+        edit = new WebOrderUpdateRequest
+        {
+            CustomerName = order!.CustomerName,
+            Phone = order.Phone,
+            Address = order.Address,
+            Note = order.Note,
+            Discount = order.Discount,
+            DeliveryCharge = order.DeliveryCharge,
+            Advance = order.Advance,
+            Items = order.Items.Select(i => new WebOrderLine { VariantId = i.ProductVariantId, Quantity = i.Quantity, UnitPrice = i.UnitPrice }).ToList()
+        };
+        dirty = false;
+    }
+
+    private OrderVariantOption? Option(int variantId) => byId.GetValueOrDefault(variantId);
+
+    private string NameOf(int variantId) => order?.Items.FirstOrDefault(i => i.ProductVariantId == variantId)?.ProductName ?? "Product";
+
+    private void Touch() => dirty = true;
+
+    private void Add(OrderVariantOption o)
+    {
+        var line = edit!.Items.FirstOrDefault(i => i.VariantId == o.VariantId);
+        if (line != null) line.Quantity++;
+        else edit.Items.Add(new WebOrderLine { VariantId = o.VariantId, Quantity = 1, UnitPrice = o.Price });
+        query = "";
+        addOpen = false;
+        dirty = true;
+    }
+
+    private void OnAddKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") addOpen = false;
+        if (e.Key == "Enter" && Matches.Count > 0) Add(Matches[0]);
+    }
+
+    private void Remove(WebOrderLine line)
+    {
+        edit!.Items.Remove(line);
+        dirty = true;
+    }
+
+    private void Qty(WebOrderLine line, int by)
+    {
+        line.Quantity = Math.Max(1, line.Quantity + by);
+        dirty = true;
+    }
+
+    private void SetQty(WebOrderLine line, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var q)) line.Quantity = Math.Clamp(q, 1, 1000);
+        dirty = true;
+    }
+
+    private void Price(WebOrderLine line, decimal by)
+    {
+        line.UnitPrice = Math.Max(0, line.UnitPrice + by);
+        dirty = true;
+    }
+
+    private void SetPrice(WebOrderLine line, ChangeEventArgs e)
+    {
+        if (decimal.TryParse(e.Value?.ToString(), out var p)) line.UnitPrice = Math.Max(0, p);
+        dirty = true;
+    }
+
+    private void SetMoney(ChangeEventArgs e, Action<decimal> set)
+    {
+        set(decimal.TryParse(e.Value?.ToString(), out var v) ? Math.Max(0, v) : 0);
+        dirty = true;
+    }
+
+    private static string Num(decimal v) => v == 0 ? "" : v.ToString("0.##");
+
+    // Client e age check - server o abar check kore
+    private string? Validate()
+    {
+        if (edit!.Items.Count == 0) return "Kompokkhe ekta product rakhun.";
+        if (edit.Discount > SubTotal) return "Discount sub total er cheye beshi hote parbe na.";
+        if (edit.Advance > GrandTotal) return "Advance grand total er cheye beshi hote parbe na.";
+        if (PhoneHelper.Normalize(edit.Phone) == null) return "Mobile number thik nai. 01XXXXXXXXX (11 digit) hote hobe.";
+        if (string.IsNullOrWhiteSpace(edit.CustomerName) || string.IsNullOrWhiteSpace(edit.Address)) return "Customer er naam ar thikana dite hobe.";
+        return null;
+    }
+
+    private async Task SaveAsync()
+    {
+        formError = Validate();
+        if (formError != null) return;
+        await RunAsync(async () =>
+        {
+            order = await Orders.UpdateAsync(Id, edit!);
+            StartEdit();
+            message = "Order er poriborton save hoyeche.";
+        });
+    }
+
+    private async Task ApproveAsync()
+    {
+        formError = Validate();
+        if (formError != null) return;
+        var over = edit!.Items.Select(l => (Line: l, Opt: Option(l.VariantId))).FirstOrDefault(x => x.Opt != null && x.Line.Quantity > x.Opt.Stock);
+        if (over.Opt != null)
+        {
+            formError = $"'{over.Opt.ProductName} ({over.Opt.Label})' er stock ache {over.Opt.Stock}, order e {over.Line.Quantity}. Age Stock In korun ba qty koman.";
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            order = await Orders.UpdateAsync(Id, edit);
+            order = await Orders.ConfirmAsync(Id);
+            edit = null;
+            message = $"Approve hoyeche. Invoice {order.InvoiceNo} toiri hoyeche, stock komeche." + (order.Advance > 0 ? $" Advance {Fmt.Money(order.Advance)} joma, COD {Fmt.Money(order.CodAmount)}." : "");
+        });
     }
 
     private string StepState(int i)
@@ -158,16 +514,10 @@ else
         return i <= reached ? "done" : "";
     }
 
-    private Task ConfirmAsync() => RunAsync(async () =>
-    {
-        order = await Orders.ConfirmAsync(Id);
-        message = $"Confirm hoyeche. Invoice {order.InvoiceNo} toiri hoyeche, stock komeche.";
-    });
-
     private Task DeliverAsync() => RunAsync(async () =>
     {
         order = await Orders.DeliverAsync(Id);
-        message = "Delivered. Taka (COD) invoice e joma hoyeche.";
+        message = "Delivered. Taka (COD) invoice e joma hoyeche. Courier theke taka ashle Finance → Courier Settlement e settle korun.";
     });
 
     private async Task CancelAsync()
@@ -177,6 +527,7 @@ else
         await RunAsync(async () =>
         {
             order = await Orders.CancelAsync(Id, reason);
+            edit = null;
             message = "Order cancel hoyeche." + (order.InvoiceNo != null ? " Invoice bad hoyeche, stock ferot esheche." : "");
         });
     }
@@ -186,13 +537,16 @@ else
         busy = true;
         error = null;
         message = null;
+        formError = null;
         try
         {
             await action();
         }
         catch (Exception ex)
         {
-            error = ex.Message;
+            if (Editing) formError = ex.Message; else error = ex.Message;
+            // Update hoye confirm fail korle notun data dekhay
+            try { order = await Orders.GetByIdAsync(Id); } catch (Exception) { }
         }
         finally
         {

@@ -1,0 +1,312 @@
+@page "/finance/assets"
+@attribute [RequirePermission(Perms.AssetsView)]
+@inject FinanceService Finance
+@inject AuthState Auth
+@inject IJSRuntime JS
+
+<PageTitle>Asset Management</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1 class="h3">Asset Management</h1>
+        <div class="page-sub">Dokaner furniture, computer, rack, mannequin - kena dam ar ajker mullo.</div>
+    </div>
+    @if (Auth.Can(Perms.AssetsAdd))
+    {
+        <button class="btn btn-primary" @onclick="StartAdd"><i class="bi bi-plus-lg me-1"></i>Add asset</button>
+    }
+</div>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger d-flex gap-2"><i class="bi bi-exclamation-triangle-fill"></i><span>@error</span></div>
+}
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-success d-flex gap-2"><i class="bi bi-check-circle-fill"></i><span>@message</span></div>
+}
+
+@if (assets == null)
+{
+    @if (string.IsNullOrEmpty(error))
+    {
+        <div class="loading">Loading...</div>
+    }
+}
+else
+{
+    var active = assets.Where(a => a.Status != AssetStatus.Disposed).ToList();
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-pc-display" Tone="purple" Label="Mot asset" Value="@active.Sum(a => a.Quantity).ToString("N0")">@active.Count ta item</StatCard></div>
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-cart-check" Tone="primary" Label="Kena dam" Value="@Fmt.Money(active.Sum(a => a.TotalCost))">Disposed chara</StatCard></div>
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-graph-down-arrow" Tone="success" Label="Ajker mullo" Value="@Fmt.Money(active.Sum(a => a.CurrentValue))">Depreciation bad diye</StatCard></div>
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-tools" Tone="warning" Label="Repair e" Value="@assets.Count(a => a.Status == AssetStatus.Repair).ToString()">@assets.Count(a => a.Status == AssetStatus.Disposed) ta disposed</StatCard></div>
+    </div>
+
+    <div class="card">
+        <div class="card-body d-flex flex-wrap gap-2 border-bottom">
+            <div class="btn-group btn-group-sm" role="group" aria-label="Status">
+                @foreach (var f in Filters)
+                {
+                    <button class="btn @(filter == f ? "btn-primary" : "btn-outline-secondary")" @onclick="() => filter = f">@f</button>
+                }
+            </div>
+            <input class="form-control form-control-sm ms-auto" style="max-width:240px" placeholder="Naam / category / location" @bind="search" @bind:event="oninput" />
+        </div>
+        @if (Shown.Count == 0)
+        {
+            <div class="card-body text-center text-muted py-5"><i class="bi bi-pc-display fs-1 d-block mb-2"></i>Kono asset nai.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th>Asset</th><th>Category</th><th>Kena</th><th class="text-end">Qty</th><th class="text-end">Kena dam</th><th class="text-end">Ajker mullo</th><th>Status</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var a in Shown)
+                        {
+                            <tr class="@(a.Status == AssetStatus.Disposed ? "text-muted" : "")">
+                                <td>
+                                    <div class="fw-semibold">@a.Name</div>
+                                    <div class="small text-muted">
+                                        @if (a.Location != null) { <span class="me-2"><i class="bi bi-geo-alt me-1"></i>@a.Location</span> }
+                                        @if (a.Supplier != null) { <span><i class="bi bi-shop me-1"></i>@a.Supplier</span> }
+                                    </div>
+                                </td>
+                                <td>@a.Category</td>
+                                <td class="text-nowrap small">@Fmt.Date(a.PurchaseDate)</td>
+                                <td class="text-end">@a.Quantity</td>
+                                <td class="text-end">@Fmt.Money(a.TotalCost)</td>
+                                <td class="text-end">
+                                    <span class="fw-semibold">@Fmt.Money(a.CurrentValue)</span>
+                                    @if (a.DepreciationPercent > 0) { <div class="small text-muted">@a.DepreciationPercent.ToString("0.#")% / bochor</div> }
+                                </td>
+                                <td><span class="badge @StatusCss(a.Status)"><i class="bi @StatusIcon(a.Status) me-1"></i>@a.Status</span></td>
+                                <td class="text-end text-nowrap">
+                                    @if (Auth.Can(Perms.AssetsEdit)) { <button class="btn btn-sm btn-light border" title="Edit" @onclick="() => StartEdit(a)"><i class="bi bi-pencil"></i></button> }
+                                    @if (Auth.Can(Perms.AssetsDelete)) { <button class="btn btn-sm btn-light border text-danger ms-1" title="Delete" disabled="@busy" @onclick="() => DeleteAsync(a)"><i class="bi bi-trash"></i></button> }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+
+@if (form != null)
+{
+    <div class="ui-modal-backdrop" @onclick="() => form = null"></div>
+    <div class="ui-modal" role="dialog" aria-modal="true">
+        <div class="ui-modal-head">
+            <h2 class="h5 mb-0">@(form.Id == 0 ? "Add asset" : "Edit asset")</h2>
+            <button class="btn btn-sm btn-link text-muted" title="Close" @onclick="() => form = null"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <EditForm Model="form" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+            <div class="ui-modal-body">
+                @if (!string.IsNullOrEmpty(formError))
+                {
+                    <div class="alert alert-danger py-2 small">@formError</div>
+                }
+                <div class="row g-3">
+                    <div class="col-sm-7">
+                        <label class="form-label">Naam <span class="text-danger">*</span></label>
+                        <InputText class="form-control" @bind-Value="form.Name" placeholder="Glass display rack" />
+                        <ValidationMessage For="() => form.Name" />
+                    </div>
+                    <div class="col-sm-5">
+                        <label class="form-label">Category</label>
+                        <InputText class="form-control" list="asset-cats" @bind-Value="form.Category" />
+                        <datalist id="asset-cats">
+                            @foreach (var c in AssetCategories.All)
+                            {
+                                <option value="@c"></option>
+                            }
+                        </datalist>
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label">Kena tarikh</label>
+                        <InputDate class="form-control" @bind-Value="form.PurchaseDate" />
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label">Dam (protiti)</label>
+                        <InputNumber class="form-control text-end" @bind-Value="form.PurchasePrice" />
+                        <ValidationMessage For="() => form.PurchasePrice" />
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label">Quantity</label>
+                        <InputNumber class="form-control text-end" @bind-Value="form.Quantity" />
+                        <ValidationMessage For="() => form.Quantity" />
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label">Kon account theke taka dilen</label>
+                        <InputSelect class="form-select" @bind-Value="form.AccountId">
+                            <option value="">Khoroch e dhorbo na</option>
+                            @foreach (var a in accounts.Where(a => a.IsActive || a.Id == form.AccountId))
+                            {
+                                <option value="@a.Id">@a.Name</option>
+                            }
+                        </InputSelect>
+                        <div class="pf-hint">Dile @Fmt.Money(form.TotalCost) "Asset purchase" khoroch hobe</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label">Depreciation (% / bochor)</label>
+                        <InputNumber class="form-control text-end" @bind-Value="form.DepreciationPercent" />
+                        <div class="pf-hint">Furniture ~10%, computer ~20-30%</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label">Location</label>
+                        <InputText class="form-control" @bind-Value="form.Location" placeholder="Main shop, 1st floor" />
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label">Kothay theke kena</label>
+                        <InputText class="form-control" @bind-Value="form.Supplier" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Status</label>
+                        <div class="row g-2">
+                            @foreach (var st in AssetStatus.All)
+                            {
+                                <div class="col-4">
+                                    <button type="button" class="cf-type @(form.Status == st ? "active" : "")" @onclick="() => form.Status = st">
+                                        <i class="bi @StatusIcon(st)"></i><span class="cf-type-name">@st</span>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Note</label>
+                        <InputText class="form-control" @bind-Value="form.Note" placeholder="Warranty, serial no ..." />
+                    </div>
+                </div>
+            </div>
+            <div class="ui-modal-foot">
+                <button type="button" class="btn btn-light border" @onclick="() => form = null">Cancel</button>
+                <button type="submit" class="btn btn-primary px-3" disabled="@busy"><i class="bi bi-check2 me-1"></i>@(busy ? "Saving..." : "Save")</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@code {
+    private static readonly string[] Filters = { "All", AssetStatus.Active, AssetStatus.Repair, AssetStatus.Disposed };
+
+    private List<Asset>? assets;
+    private List<FinanceAccount> accounts = new();
+    private Asset? form;
+    private string filter = "All";
+    private string search = "";
+    private string? error, message, formError;
+    private bool busy;
+
+    private List<Asset> Shown => (assets ?? new())
+        .Where(a => filter == "All" || a.Status == filter)
+        .Where(a => search.Length == 0
+                 || a.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                 || a.Category.Contains(search, StringComparison.OrdinalIgnoreCase)
+                 || (a.Location?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false))
+        .ToList();
+
+    private static string StatusCss(string s) => s switch
+    {
+        AssetStatus.Active => "bg-success-subtle text-success-emphasis",
+        AssetStatus.Repair => "bg-warning-subtle text-warning-emphasis",
+        _ => "bg-secondary-subtle text-secondary-emphasis"
+    };
+
+    private static string StatusIcon(string s) => s switch
+    {
+        AssetStatus.Active => "bi-check-circle",
+        AssetStatus.Repair => "bi-tools",
+        _ => "bi-archive"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            accounts = await Finance.GetAccountsAsync();
+        }
+        catch (Exception)
+        {
+            // Account list na ashleo asset dekha jay
+        }
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            assets = await Finance.GetAssetsAsync();
+        }
+        catch (Exception ex)
+        {
+            error = "Data ana jay nai: " + ex.Message;
+        }
+    }
+
+    private void StartAdd()
+    {
+        formError = null;
+        form = new Asset();
+    }
+
+    private void StartEdit(Asset a)
+    {
+        formError = null;
+        form = new Asset
+        {
+            Id = a.Id, Name = a.Name, Category = a.Category, PurchaseDate = a.PurchaseDate, PurchasePrice = a.PurchasePrice, Quantity = a.Quantity,
+            DepreciationPercent = a.DepreciationPercent, Location = a.Location, Supplier = a.Supplier, Status = a.Status, AccountId = a.AccountId, Note = a.Note
+        };
+    }
+
+    private async Task SaveAsync()
+    {
+        busy = true;
+        formError = null;
+        try
+        {
+            await Finance.SaveAssetAsync(form!);
+            message = $"'{form!.Name}' save hoyeche.";
+            form = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            formError = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task DeleteAsync(Asset a)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"'{a.Name}' delete korben?" + (a.AccountId != null ? " Tar khoroch entry o bad jabe." : ""))) return;
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await Finance.DeleteAssetAsync(a.Id);
+            message = $"'{a.Name}' delete hoyeche.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

@@ -232,6 +232,16 @@
                 Link("New Stock Entry", "bi-plus-circle", "stock/new", "orange", Perms.StockAdd)),
             Link("Category / Brand", "bi-tags", "catalog", "purple", Perms.CatalogView)
         }),
+        new("FINANCE", new()
+        {
+            Group("Finance", "bi-wallet2", "teal",
+                Link("Finance Dashboard", "bi-speedometer2", "finance", "teal", Perms.FinanceView),
+                Link("Accounts & Bank", "bi-bank", "finance/accounts", "teal", Perms.AccountsView),
+                Link("Income & Expense", "bi-arrow-left-right", "finance/transactions", "teal", Perms.TxnView),
+                Link("Courier Settlement", "bi-truck", "finance/courier", "teal", Perms.CourierView),
+                Link("Cash Flow", "bi-graph-up", "finance/cash-flow", "teal", Perms.CashFlowView),
+                Link("Asset Management", "bi-pc-display", "finance/assets", "teal", Perms.AssetsView))
+        }),
         new("ADMINISTRATIVE", new()
         {
             Group("User Management", "bi-shield-lock", "teal",

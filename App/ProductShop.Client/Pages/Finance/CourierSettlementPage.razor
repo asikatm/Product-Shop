@@ -1,0 +1,335 @@
+@page "/finance/courier"
+@attribute [RequirePermission(Perms.CourierView)]
+@inject FinanceService Finance
+@inject AuthState Auth
+@inject IJSRuntime JS
+
+<PageTitle>Courier Settlement</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1 class="h3">Courier Settlement</h1>
+        <div class="page-sub">Courier COD er taka tule charge kete je taka pathay, sheta bujhe newa.</div>
+    </div>
+    @if (Auth.Can(Perms.CourierAdd))
+    {
+        <button class="btn btn-primary" @onclick="StartAdd"><i class="bi bi-plus-lg me-1"></i>New settlement</button>
+    }
+</div>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger d-flex gap-2"><i class="bi bi-exclamation-triangle-fill"></i><span>@error</span></div>
+}
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-success d-flex gap-2"><i class="bi bi-check-circle-fill"></i><span>@message</span></div>
+}
+
+@if (settlements == null)
+{
+    @if (string.IsNullOrEmpty(error))
+    {
+        <div class="loading">Loading...</div>
+    }
+}
+else
+{
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-hourglass-split" Tone="warning" Label="Courier er kache pawna" Value="@Fmt.Money(pending.Sum(p => p.Total))">@pending.Count ta delivered order</StatCard></div>
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-cash-coin" Tone="success" Label="Mot COD bujhe peyechi" Value="@Fmt.Money(settlements.Sum(s => s.CodAmount))">@settlements.Sum(s => s.OrderCount) ta order</StatCard></div>
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-truck" Tone="orange" Label="Courier charge" Value="@Fmt.Money(settlements.Sum(s => s.DeliveryCharge + s.CodCharge))">Delivery + COD charge</StatCard></div>
+        <div class="col-6 col-xl-3"><StatCard Icon="bi-bank" Tone="primary" Label="Account e ashche" Value="@Fmt.Money(settlements.Sum(s => s.NetAmount))">@settlements.Count ta settlement</StatCard></div>
+    </div>
+
+    @if (pending.Count > 0)
+    {
+        <div class="card mb-3 border-warning-subtle">
+            <div class="card-header bg-warning-subtle d-flex align-items-center gap-2">
+                <i class="bi bi-hourglass-split text-warning-emphasis"></i><span>Settle baki (@pending.Count)</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Order</th><th>Customer</th><th>Delivered</th><th class="text-end">COD</th></tr></thead>
+                    <tbody>
+                        @foreach (var p in pending)
+                        {
+                            <tr>
+                                <td><a href="web-orders/@p.Id">@p.OrderNo</a></td>
+                                <td>@p.CustomerName <span class="text-muted small">@PhoneHelper.Pretty(p.Phone)</span></td>
+                                <td class="small">@Fmt.Date(p.DeliveredAt)</td>
+                                <td class="text-end">@Fmt.Money(p.Total)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <div class="card">
+        <div class="card-header">Settlement history</div>
+        @if (settlements.Count == 0)
+        {
+            <div class="card-body text-center text-muted py-5"><i class="bi bi-truck fs-1 d-block mb-2"></i>Ekhono kono settlement nai.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th>Date</th><th>Courier</th><th>Orders</th><th>Account</th><th class="text-end">COD</th><th class="text-end">Charge</th><th class="text-end">Net</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in settlements)
+                        {
+                            <tr>
+                                <td class="text-nowrap">@Fmt.Date(s.Date)</td>
+                                <td>
+                                    <div class="fw-semibold">@s.CourierName</div>
+                                    @if (s.ReferenceNo != null) { <div class="small text-muted">Ref: @s.ReferenceNo</div> }
+                                </td>
+                                <td class="small">
+                                    @s.OrderCount ta
+                                    @if (s.OrderNos.Count > 0) { <div class="text-muted">@string.Join(", ", s.OrderNos)</div> }
+                                </td>
+                                <td>@s.AccountName</td>
+                                <td class="text-end">@Fmt.Money(s.CodAmount)</td>
+                                <td class="text-end text-danger">− @Fmt.Money(s.DeliveryCharge + s.CodCharge)</td>
+                                <td class="text-end fw-semibold text-success">@Fmt.Money(s.NetAmount)</td>
+                                <td class="text-end">
+                                    @if (Auth.Can(Perms.CourierDelete))
+                                    {
+                                        <button class="btn btn-sm btn-light border text-danger" title="Delete" disabled="@busy" @onclick="() => DeleteAsync(s)"><i class="bi bi-trash"></i></button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+
+@* ---------- Notun settlement ---------- *@
+@if (form != null)
+{
+    <div class="ui-modal-backdrop" @onclick="() => form = null"></div>
+    <div class="ui-modal ui-modal-lg" role="dialog" aria-modal="true">
+        <div class="ui-modal-head">
+            <h2 class="h5 mb-0"><i class="bi bi-truck me-2"></i>New courier settlement</h2>
+            <button class="btn btn-sm btn-link text-muted" title="Close" @onclick="() => form = null"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <EditForm Model="form" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+            <div class="ui-modal-body">
+                @if (!string.IsNullOrEmpty(formError))
+                {
+                    <div class="alert alert-danger py-2 small">@formError</div>
+                }
+                <div class="row g-3">
+                    <div class="col-sm-4">
+                        <label class="form-label">Courier <span class="text-danger">*</span></label>
+                        <InputText class="form-control" list="courier-names" @bind-Value="form.CourierName" placeholder="Steadfast" />
+                        <datalist id="courier-names">
+                            @foreach (var c in Couriers.All)
+                            {
+                                <option value="@c"></option>
+                            }
+                        </datalist>
+                        <ValidationMessage For="() => form.CourierName" />
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label">Date</label>
+                        <InputDate class="form-control" @bind-Value="form.Date" />
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label">Kon account e ashlo <span class="text-danger">*</span></label>
+                        <InputSelect class="form-select" @bind-Value="form.AccountId">
+                            <option value="0">-- Select --</option>
+                            @foreach (var a in accounts.Where(a => a.IsActive))
+                            {
+                                <option value="@a.Id">@a.Name</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => form.AccountId" />
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label d-flex justify-content-between">
+                            <span>Kon order gulor taka <span class="text-muted fw-normal">(@form.WebOrderIds.Count ta select)</span></span>
+                            @if (pending.Count > 0)
+                            {
+                                <button type="button" class="btn btn-link btn-sm p-0" @onclick="ToggleAll">@(form.WebOrderIds.Count == pending.Count ? "Shob bad" : "Shob select")</button>
+                            }
+                        </label>
+                        @if (pending.Count == 0)
+                        {
+                            <div class="pf-hint">Settle baki kono web order nai. Nicher COD ar order shonkha nije likhun.</div>
+                        }
+                        else
+                        {
+                            <div class="fin-pick">
+                                @foreach (var p in pending)
+                                {
+                                    var on = form.WebOrderIds.Contains(p.Id);
+                                    <label class="fin-pick-row @(on ? "on" : "")">
+                                        <input type="checkbox" class="form-check-input" checked="@on" @onchange="() => Toggle(p.Id)" />
+                                        <span class="fw-semibold">@p.OrderNo</span>
+                                        <span class="text-muted small text-truncate">@p.CustomerName</span>
+                                        <span class="ms-auto">@Fmt.Money(p.Total)</span>
+                                    </label>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    @if (form.WebOrderIds.Count == 0)
+                    {
+                        <div class="col-sm-4">
+                            <label class="form-label">Koyta order</label>
+                            <InputNumber class="form-control text-end" @bind-Value="form.OrderCount" />
+                        </div>
+                    }
+                    <div class="col-sm-4">
+                        <label class="form-label">COD collect <span class="text-danger">*</span></label>
+                        <InputNumber class="form-control text-end" @bind-Value="form.CodAmount" />
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label">Delivery charge</label>
+                        <InputNumber class="form-control text-end" @bind-Value="form.DeliveryCharge" />
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label">COD charge <button type="button" class="btn btn-link btn-sm p-0 ms-1" title="COD er 1%" @onclick="OnePercent">(1%)</button></label>
+                        <InputNumber class="form-control text-end" @bind-Value="form.CodCharge" />
+                    </div>
+                    <div class="col-sm-8">
+                        <label class="form-label">Reference / Note</label>
+                        <div class="input-group">
+                            <InputText class="form-control" @bind-Value="form.ReferenceNo" placeholder="Payment ID" />
+                            <InputText class="form-control" @bind-Value="form.Note" placeholder="Note" />
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="fin-net">
+                            <span>COD @Fmt.Money(form.CodAmount) − charge @Fmt.Money(form.DeliveryCharge + form.CodCharge)</span>
+                            <strong class="@(Net < 0 ? "text-danger" : "")">Account e ashbe @Fmt.Money(Net)</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="ui-modal-foot">
+                <button type="button" class="btn btn-light border" @onclick="() => form = null">Cancel</button>
+                <button type="submit" class="btn btn-success px-3" disabled="@busy"><i class="bi bi-check2 me-1"></i>@(busy ? "Saving..." : $"Settle ({Fmt.Money(Net)})")</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@code {
+    private List<CourierSettlement>? settlements;
+    private List<PendingCourierOrder> pending = new();
+    private List<FinanceAccount> accounts = new();
+    private CourierSettlementRequest? form;
+    private string? error, message, formError;
+    private bool busy;
+
+    private decimal Net => form == null ? 0 : form.CodAmount - form.DeliveryCharge - form.CodCharge;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var s = Finance.GetSettlementsAsync();
+            var p = Finance.GetPendingCourierAsync();
+            var a = Finance.GetAccountsAsync();
+            settlements = await s;
+            pending = await p;
+            accounts = await a;
+        }
+        catch (Exception ex)
+        {
+            error = "Data ana jay nai: " + ex.Message;
+        }
+    }
+
+    private void StartAdd()
+    {
+        formError = null;
+        form = new CourierSettlementRequest
+        {
+            CourierName = settlements?.FirstOrDefault()?.CourierName ?? "",
+            AccountId = accounts.FirstOrDefault(a => a.IsActive && a.Type != AccountTypes.Cash)?.Id ?? accounts.FirstOrDefault(a => a.IsActive)?.Id ?? 0
+        };
+    }
+
+    private void Toggle(int id)
+    {
+        if (!form!.WebOrderIds.Remove(id)) form.WebOrderIds.Add(id);
+        Recalc();
+    }
+
+    private void ToggleAll()
+    {
+        form!.WebOrderIds = form.WebOrderIds.Count == pending.Count ? new() : pending.Select(p => p.Id).ToList();
+        Recalc();
+    }
+
+    // Order select korle COD ar delivery charge nije boshe (bodlano jay)
+    private void Recalc()
+    {
+        var picked = pending.Where(p => form!.WebOrderIds.Contains(p.Id)).ToList();
+        form!.OrderCount = picked.Count;
+        form.CodAmount = picked.Sum(p => p.Total);
+        form.DeliveryCharge = picked.Sum(p => p.DeliveryCharge);
+    }
+
+    private void OnePercent() => form!.CodCharge = Math.Round(form.CodAmount * 0.01m, 0);
+
+    private async Task SaveAsync()
+    {
+        busy = true;
+        formError = null;
+        try
+        {
+            var s = await Finance.CreateSettlementAsync(form!);
+            message = $"{s.CourierName} settlement save hoyeche - {Fmt.Money(s.NetAmount)} {accounts.FirstOrDefault(a => a.Id == s.AccountId)?.Name} e joma.";
+            form = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            formError = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task DeleteAsync(CourierSettlement s)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"{s.CourierName} er {Fmt.Money(s.NetAmount)} settlement delete korben? Account theke o taka bad jabe.")) return;
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await Finance.DeleteSettlementAsync(s.Id);
+            message = "Settlement delete hoyeche. Order gulo abar 'settle baki' te.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

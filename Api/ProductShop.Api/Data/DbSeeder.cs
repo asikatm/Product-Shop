@@ -43,6 +43,9 @@ public static class DbSeeder
         if (!await db.Shops.AnyAsync())
             db.Shops.Add(new Shop { Name = "Main shop" });
 
+        if (!await db.FinanceAccounts.AnyAsync())
+            db.FinanceAccounts.Add(new FinanceAccount { Name = "Cash in hand", Type = AccountTypes.Cash, Note = "Dokaner cash box" });
+
         await db.SaveChangesAsync();
     }
 }

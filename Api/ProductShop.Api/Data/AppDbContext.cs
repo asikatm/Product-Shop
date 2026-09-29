@@ -26,6 +26,10 @@ public class AppDbContext : DbContext
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<WebOrder> WebOrders => Set<WebOrder>();
     public DbSet<WebOrderItem> WebOrderItems => Set<WebOrderItem>();
+    public DbSet<FinanceAccount> FinanceAccounts => Set<FinanceAccount>();
+    public DbSet<FinanceTransaction> FinanceTransactions => Set<FinanceTransaction>();
+    public DbSet<CourierSettlement> CourierSettlements => Set<CourierSettlement>();
+    public DbSet<Asset> Assets => Set<Asset>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -178,6 +182,35 @@ public class AppDbContext : DbContext
             e.HasMany(o => o.Items).WithOne().HasForeignKey(i => i.WebOrderId).OnDelete(DeleteBehavior.Cascade);
             // Sale delete hole order theke link shoriye dey
             e.HasOne<Sale>().WithMany().HasForeignKey(o => o.SaleId).OnDelete(DeleteBehavior.SetNull);
+            // Settlement delete hole order abar "settle baki" hoy
+            e.HasOne<CourierSettlement>().WithMany().HasForeignKey(o => o.CourierSettlementId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<FinanceAccount>(e =>
+        {
+            e.HasIndex(a => a.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<FinanceTransaction>(e =>
+        {
+            e.HasIndex(t => t.Date);
+            // Transaction thakle account delete kora jabe na
+            e.HasOne<FinanceAccount>().WithMany().HasForeignKey(t => t.AccountId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<FinanceAccount>().WithMany().HasForeignKey(t => t.ToAccountId).OnDelete(DeleteBehavior.Restrict);
+            // Settlement / asset delete hole tar transaction o jay
+            e.HasOne<CourierSettlement>().WithMany().HasForeignKey(t => t.CourierSettlementId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Asset>().WithMany().HasForeignKey(t => t.AssetId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CourierSettlement>(e =>
+        {
+            e.HasIndex(s => s.Date);
+            e.HasOne<FinanceAccount>().WithMany().HasForeignKey(s => s.AccountId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Asset>(e =>
+        {
+            e.HasOne<FinanceAccount>().WithMany().HasForeignKey(a => a.AccountId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<WebOrderItem>(e =>
