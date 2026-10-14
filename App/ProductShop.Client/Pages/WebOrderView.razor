@@ -206,6 +206,7 @@ else
             </div>
 
             <div class="col-lg-4">
+                <PaymentCard Order="order" OnChanged="OnPaymentChanged" />
                 <div class="card mb-3">
                     <div class="card-header">Customer</div>
                     <div class="card-body">
@@ -283,6 +284,7 @@ else
                 </div>
             </div>
             <div class="col-lg-4">
+                <PaymentCard Order="order" OnChanged="OnPaymentChanged" />
                 <div class="card mb-3">
                     <div class="card-header">Customer</div>
                     <div class="card-body">
@@ -512,6 +514,16 @@ else
         if (order!.Status == WebOrderStatus.Cancelled) return i == 0 ? "done" : "off";
         var reached = order.Status switch { WebOrderStatus.Pending => 0, WebOrderStatus.Confirmed => 1, _ => 2 };
         return i <= reached ? "done" : "";
+    }
+
+    // bKash / Nagad verify / reject er por - edit form er onno poriborton thake
+    private void OnPaymentChanged(WebOrder updated)
+    {
+        order = updated;
+        if (edit != null) edit.Advance = updated.Advance;
+        message = updated.PaymentStatus == PaymentStatus.Verified
+            ? $"{updated.PaymentMethod} payment verify hoyeche - {Fmt.Money(updated.PaymentAmount)} Advance e joma."
+            : "Payment reject kora hoyeche.";
     }
 
     private Task DeliverAsync() => RunAsync(async () =>

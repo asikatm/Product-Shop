@@ -12,6 +12,33 @@ public static class WebOrderStatus
     public static readonly string[] All = { Pending, Confirmed, Delivered, Cancelled };
 }
 
+// Checkout e payment: COD, ba bKash / Nagad e Send Money kore TrxID deya
+public static class PaymentMethods
+{
+    public const string Cod = "COD";
+    public const string Bkash = "bKash";
+    public const string Nagad = "Nagad";
+
+    public static readonly string[] Online = { Bkash, Nagad };
+}
+
+public static class PaymentStatus
+{
+    public const string Pending = "Pending";      // customer TrxID diyeche, check kora baki
+    public const string Verified = "Verified";    // bKash / Nagad app e mile geche - Advance e joma
+    public const string Rejected = "Rejected";    // TrxID mele nai
+}
+
+// Website e dekhano bKash / Nagad number (appsettings "Store:Payments")
+public class PaymentOption
+{
+    public string Method { get; set; } = string.Empty;
+    public string Number { get; set; } = string.Empty;
+
+    // Personal = Send Money, Merchant = Payment
+    public string Type { get; set; } = "Personal";
+}
+
 // Website theke asha order
 public class WebOrder
 {
@@ -53,6 +80,23 @@ public class WebOrder
 
     // Courier theke taka ashle je settlement e dhora hoyeche
     public int? CourierSettlementId { get; set; }
+
+    // ---- Website e customer er online payment (bKash / Nagad) ----
+    [StringLength(20)]
+    public string PaymentMethod { get; set; } = PaymentMethods.Cod;
+
+    // Je number theke pathiyeche
+    [StringLength(20)]
+    public string? PaymentFrom { get; set; }
+
+    [StringLength(30)]
+    public string? PaymentTrxId { get; set; }
+
+    public decimal PaymentAmount { get; set; }
+
+    // COD hole null
+    [StringLength(20)]
+    public string? PaymentStatus { get; set; }
 
     // Confirm korle je sale / invoice toiri hoy
     public int? SaleId { get; set; }
@@ -192,6 +236,9 @@ public class StoreCategory
 public class StoreInfo
 {
     public decimal DeliveryCharge { get; set; }
+
+    // bKash / Nagad - khali hole shudhu COD
+    public List<PaymentOption> Payments { get; set; } = new();
 }
 
 public class PlaceOrderItem
@@ -218,6 +265,27 @@ public class PlaceOrderRequest
     public string? Note { get; set; }
 
     public List<PlaceOrderItem> Items { get; set; } = new();
+
+    // COD / bKash / Nagad
+    [StringLength(20)]
+    public string PaymentMethod { get; set; } = PaymentMethods.Cod;
+
+    [StringLength(20)]
+    public string? PaymentFrom { get; set; }
+
+    [StringLength(30)]
+    public string? PaymentTrxId { get; set; }
+
+    public decimal PaymentAmount { get; set; }
+}
+
+// Admin: online payment mile gele Verify (Advance e joma), na mille Reject
+public class PaymentReviewRequest
+{
+    public bool Verified { get; set; }
+
+    // Verify e: app e asholei koto taka eseche (khali hole customer er deya amount)
+    public decimal? Amount { get; set; }
 }
 
 public class PlaceOrderResponse

@@ -3556,3 +3556,36 @@ a:hover {
 .cf-legend li { padding: 0.2rem 0.4rem; }
 .cf-legend .viz-legend-value { margin-left: 0.35rem; }
 .cf-table td, .cf-table th { font-variant-numeric: tabular-nums; }
+
+/* ---------- Website checkout: payment (COD / bKash / Nagad) ---------- */
+.st-pay-options { display: grid; gap: 0.5rem; }
+.st-pay {
+    display: flex; align-items: center; gap: 0.75rem; width: 100%; text-align: left; cursor: pointer;
+    background: #fff; border: 2px solid var(--st-line); border-radius: 12px; padding: 0.6rem 0.8rem;
+}
+.st-pay strong { display: block; color: var(--st-ink); }
+.st-pay small { color: var(--st-muted); }
+.st-pay.on { border-color: var(--st-pink); background: #fdf2f6; }
+.st-pay-logo {
+    width: 52px; height: 36px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    color: #fff; font: 800 0.8rem Inter, sans-serif; letter-spacing: -0.01em;
+}
+.st-pay-logo.cod { background: #16a34a; font-size: 1.2rem; }
+.st-pay-logo.bkash { background: #e2136e; }
+.st-pay-logo.nagad { background: #ec1c24; background: linear-gradient(135deg, #f7941d, #ec1c24); }
+.st-pay-box { margin-top: 0.75rem; border-radius: 12px; padding: 0.9rem 1rem; border: 1px dashed #e2136e; background: #fff5fa; }
+.st-pay-box.nagad { border-color: #f7941d; background: #fff8f0; }
+.st-pay-box ol { padding-left: 1.2rem; margin: 0 0 0.75rem; display: grid; gap: 0.35rem; }
+.st-pay-no { font: 800 1.15rem Inter, sans-serif; letter-spacing: 0.02em; color: var(--st-ink); }
+.st-copy { border: 1px solid var(--st-line); background: #fff; border-radius: 8px; padding: 1px 8px; font-size: 0.85rem; margin-left: 6px; cursor: pointer; }
+.st-pay-quick { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.st-pay-quick button { border: 1px solid var(--st-line); background: #fff; border-radius: 999px; padding: 1px 10px; font-size: 0.82rem; cursor: pointer; }
+.st-trx { text-transform: uppercase; letter-spacing: 0.06em; font-family: Inter, monospace; }
+.st-pay-due { margin-top: 0.6rem; font-size: 0.95rem; }
+.st-pay-note { margin-top: 0.5rem; font-size: 0.88rem; color: var(--st-muted); }
+
+/* ---------- Software: web order payment card ---------- */
+.wo-pay-badge { font: 800 0.75rem Inter, sans-serif; color: #fff; border-radius: 6px; padding: 2px 8px; }
+.wo-pay-badge.bkash { background: #e2136e; }
+.wo-pay-badge.nagad { background: linear-gradient(135deg, #f7941d, #ec1c24); }
+.wo-trx { font: 700 1.05rem Inter, monospace; letter-spacing: 0.05em; }

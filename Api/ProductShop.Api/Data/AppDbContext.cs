@@ -179,6 +179,9 @@ public class AppDbContext : DbContext
             e.HasIndex(o => o.OrderNo).IsUnique();
             e.HasIndex(o => o.Status);
             e.HasIndex(o => o.CreatedAt);
+            // Ek TrxID duibar use hoy na
+            e.HasIndex(o => o.PaymentTrxId);
+            e.Property(o => o.PaymentMethod).HasDefaultValue(PaymentMethods.Cod);
             e.HasMany(o => o.Items).WithOne().HasForeignKey(i => i.WebOrderId).OnDelete(DeleteBehavior.Cascade);
             // Sale delete hole order theke link shoriye dey
             e.HasOne<Sale>().WithMany().HasForeignKey(o => o.SaleId).OnDelete(DeleteBehavior.SetNull);

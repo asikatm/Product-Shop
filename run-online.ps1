@@ -22,10 +22,18 @@ function Stop-Online {
     Get-Process cloudflared -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $cloudflared } | Stop-Process -Force
 }
 
+# GitHub Pages er website (asikatm.github.io/garments) ke notun link janano - order soja software e ashbe
+function Update-GitHubSite {
+    $script = Join-Path $root 'publish-github.ps1'
+    if (-not (Test-Path $script)) { return }
+    try { & $script -ConfigOnly -Api "http://localhost:$Port" | Out-Host }
+    catch { Write-Host "  GitHub website update hoy nai: $_" -ForegroundColor Yellow }
+}
 if ($Stop) {
     Stop-Online
     if (Test-Path $urlFile) { Remove-Item $urlFile }
     Write-Host 'Online link bondho kora holo.'
+    Update-GitHubSite   # website WhatsApp mode e chole jay
     return
 }
 
@@ -81,8 +89,10 @@ function Start-Tunnel {
     Write-Host "  $url" -ForegroundColor Cyan
     Write-Host "  (Website: $url/shop)"
     Write-Host ''
+    Update-GitHubSite
     return $url
 }
+
 
 if (-not (Start-Tunnel)) { Stop-Online; throw "Link pawa jay nai. $tunnelLog dekhun (internet ache kina?)." }
 Write-Host '  Ei window khola rakhun. Bondho korte Ctrl+C chapun.'

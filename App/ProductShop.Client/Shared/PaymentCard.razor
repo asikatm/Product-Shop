@@ -1,0 +1,104 @@
+﻿@* Web order e customer er bKash / Nagad payment - mile gele Verify (Advance e joma), na hole Reject *@
+@inject WebOrderService Orders
+@inject AuthState Auth
+@inject IJSRuntime JS
+
+@if (Order.PaymentStatus != null)
+{
+    <div class="card mb-3 @(Order.PaymentStatus == PaymentStatus.Pending ? "border-warning" : "")">
+        <div class="card-header d-flex align-items-center gap-2">
+            <span class="wo-pay-badge @Order.PaymentMethod.ToLowerInvariant()">@Order.PaymentMethod</span>
+            <span class="me-auto">Online payment</span>
+            <span class="badge @StatusCss"><i class="bi @StatusIcon me-1"></i>@StatusText</span>
+        </div>
+        <div class="card-body">
+            <div class="d-flex justify-content-between mb-1"><span class="text-muted">Taka</span><strong class="fs-5">@Fmt.Money(Order.PaymentAmount)</strong></div>
+            <div class="d-flex justify-content-between mb-1"><span class="text-muted">Pathiyeche</span><a href="tel:@Order.PaymentFrom">@PhoneHelper.Pretty(Order.PaymentFrom)</a></div>
+            <div class="d-flex justify-content-between align-items-center"><span class="text-muted">TrxID</span><span class="wo-trx">@Order.PaymentTrxId</span></div>
+
+            @if (Order.PaymentStatus == PaymentStatus.Pending)
+            {
+                <div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>@Order.PaymentMethod app / SMS e ei TrxID ar taka mile kina dekhe nin.</div>
+                @if (!string.IsNullOrEmpty(error))
+                {
+                    <div class="alert alert-danger py-1 px-2 small mt-2 mb-0">@error</div>
+                }
+                @if (Auth.Can(Perms.WebOrdersEdit) && Order.Status is WebOrderStatus.Pending or WebOrderStatus.Confirmed)
+                {
+                    <div class="input-group input-group-sm mt-2">
+                        <span class="input-group-text">Asholei eseche ৳</span>
+                        <input type="number" min="1" class="form-control text-end" @bind="amount" />
+                    </div>
+                    <div class="d-flex gap-2 mt-2">
+                        <button class="btn btn-sm btn-outline-danger" disabled="@busy" @onclick="() => ReviewAsync(false)"><i class="bi bi-x-lg me-1"></i>Reject</button>
+                        <button class="btn btn-sm btn-success flex-grow-1" disabled="@busy" @onclick="() => ReviewAsync(true)"><i class="bi bi-patch-check me-1"></i>Verify</button>
+                    </div>
+                }
+            }
+            else if (Order.PaymentStatus == PaymentStatus.Verified)
+            {
+                <div class="small text-success mt-2"><i class="bi bi-check-circle me-1"></i>Advance e joma hoyeche. Baki COD @Fmt.Money(Order.CodAmount).</div>
+            }
+            else
+            {
+                <div class="small text-danger mt-2"><i class="bi bi-x-circle me-1"></i>TrxID mele nai - customer ke phone kore jenen nin. Order COD hisebe cholbe.</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public WebOrder Order { get; set; } = default!;
+    [Parameter] public EventCallback<WebOrder> OnChanged { get; set; }
+
+    private decimal amount;
+    private bool busy;
+    private string? error;
+
+    protected override void OnParametersSet() => amount = Order.PaymentAmount;
+
+    private string StatusText => Order.PaymentStatus switch
+    {
+        PaymentStatus.Verified => "Verified",
+        PaymentStatus.Rejected => "Rejected",
+        _ => "Check baki"
+    };
+
+    private string StatusCss => Order.PaymentStatus switch
+    {
+        PaymentStatus.Verified => "bg-success-subtle text-success-emphasis",
+        PaymentStatus.Rejected => "bg-danger-subtle text-danger-emphasis",
+        _ => "bg-warning-subtle text-warning-emphasis"
+    };
+
+    private string StatusIcon => Order.PaymentStatus switch
+    {
+        PaymentStatus.Verified => "bi-patch-check-fill",
+        PaymentStatus.Rejected => "bi-x-circle",
+        _ => "bi-hourglass-split"
+    };
+
+    private async Task ReviewAsync(bool verified)
+    {
+        var question = verified
+            ? $"{Order.PaymentMethod} e TrxID {Order.PaymentTrxId} - {Fmt.Money(amount)} mile geche? Advance e joma hobe."
+            : $"TrxID {Order.PaymentTrxId} reject korben?";
+        if (!await JS.InvokeAsync<bool>("confirm", question)) return;
+
+        busy = true;
+        error = null;
+        try
+        {
+            var updated = await Orders.ReviewPaymentAsync(Order.Id, verified, verified ? amount : null);
+            await OnChanged.InvokeAsync(updated);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

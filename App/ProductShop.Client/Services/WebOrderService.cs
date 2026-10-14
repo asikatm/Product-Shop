@@ -36,6 +36,10 @@ public class WebOrderService
 
     public Task<WebOrder> DeliverAsync(int id) => ActionAsync(id, "deliver", new { });
 
+    // bKash / Nagad TrxID mile gele Verify, na hole Reject
+    public Task<WebOrder> ReviewPaymentAsync(int id, bool verified, decimal? amount) =>
+        ActionAsync(id, "payment", new PaymentReviewRequest { Verified = verified, Amount = amount });
+
     public Task<WebOrder> CancelAsync(int id, string? reason) => ActionAsync(id, "cancel", new CancelWebOrderRequest { Reason = reason });
 
     private async Task<WebOrder> ActionAsync(int id, string action, object body)

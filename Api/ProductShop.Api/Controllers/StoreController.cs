@@ -1,4 +1,6 @@
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +13,7 @@ namespace ProductShop.Api.Controllers;
 [ApiController]
 [Route("api/store")]
 [AllowAnonymous]
+[EnableCors("Storefront")]
 public class StoreController : ControllerBase
 {
     private const int MaxItems = 20;
@@ -38,7 +41,13 @@ public class StoreController : ControllerBase
 
     // GET: api/store/info
     [HttpGet("info")]
-    public StoreInfo Info() => new() { DeliveryCharge = DeliveryCharge };
+    public StoreInfo Info() => new() { DeliveryCharge = DeliveryCharge, Payments = Payments };
+
+    // appsettings "Store:Payments" - bKash / Nagad number
+    private List<PaymentOption> Payments =>
+        (_config.GetSection("Store:Payments").Get<List<PaymentOption>>() ?? new())
+            .Where(p => PaymentMethods.Online.Contains(p.Method) && PhoneHelper.Normalize(p.Number) != null)
+            .ToList();
 
     // GET: api/store/categories
     [HttpGet("categories")]
@@ -139,6 +148,32 @@ public class StoreController : ControllerBase
 
         order.SubTotal = order.Items.Sum(i => i.Total);
         order.Total = order.SubTotal + order.DeliveryCharge;
+
+        // bKash / Nagad: customer Send Money kore TrxID diyeche - admin pore mile dekhe Verify kore
+        var method = string.IsNullOrWhiteSpace(request.PaymentMethod) ? PaymentMethods.Cod : request.PaymentMethod.Trim();
+        if (!string.Equals(method, PaymentMethods.Cod, StringComparison.OrdinalIgnoreCase))
+        {
+            var option = Payments.FirstOrDefault(p => string.Equals(p.Method, method, StringComparison.OrdinalIgnoreCase));
+            if (option == null) return BadRequest("Ei payment method ekhon chalu nai. Cash on delivery select korun.");
+
+            var from = PhoneHelper.Normalize(request.PaymentFrom);
+            if (from == null) return BadRequest($"Je {option.Method} number theke taka pathiyechen, sheta thik vabe likhun (01XXXXXXXXX).");
+
+            var trx = (request.PaymentTrxId ?? "").Trim().ToUpperInvariant();
+            if (!Regex.IsMatch(trx, "^[A-Z0-9]{6,20}$")) return BadRequest("Transaction ID (TrxID) thik nai. SMS e je ID asheche sheta likhun.");
+
+            if (request.PaymentAmount < 1 || request.PaymentAmount > order.Total)
+                return BadRequest($"Koto taka pathiyechen likhun (৳1 theke ৳{order.Total:N0}).");
+
+            if (await _db.WebOrders.AnyAsync(o => o.PaymentTrxId == trx && o.PaymentMethod == option.Method))
+                return BadRequest("Ei TrxID diye age-i order kora hoyeche.");
+
+            order.PaymentMethod = option.Method;
+            order.PaymentFrom = from;
+            order.PaymentTrxId = trx;
+            order.PaymentAmount = Math.Round(request.PaymentAmount, 2);
+            order.PaymentStatus = PaymentStatus.Pending;
+        }
 
         // Order no er jonno Id lage
         await using var tx = await _db.Database.BeginTransactionAsync();

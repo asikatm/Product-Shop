@@ -84,6 +84,16 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(clientUrl)
               .AllowAnyHeader()
               .AllowAnyMethod());
+
+    // api/store: nijer App (localhost:5100) + GitHub Pages er website (asikatm.github.io/garments)
+    var storeOrigins = (builder.Configuration["StoreOrigins"] ?? "https://asikatm.github.io")
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Append(clientUrl)
+        .ToArray();
+    options.AddPolicy("Storefront", policy =>
+        policy.WithOrigins(storeOrigins)
+              .AllowAnyHeader()
+              .WithMethods("GET", "POST"));
 });
 
 var app = builder.Build();

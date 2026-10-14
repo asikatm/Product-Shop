@@ -170,6 +170,58 @@ public class WebOrdersController : ControllerBase
         return order;
     }
 
+    // POST: api/weborders/5/payment
+    // bKash / Nagad app e TrxID mile gele Verify -> Advance e joma (confirm hole invoice e o). Na mille Reject.
+    [HttpPost("{id:int}/payment")]
+    [Permission(Perms.WebOrdersEdit)]
+    public async Task<ActionResult<WebOrder>> ReviewPayment(int id, PaymentReviewRequest request)
+    {
+        var order = await _db.WebOrders.Include(o => o.Items).FirstOrDefaultAsync(o => o.Id == id);
+        if (order == null) return NotFound();
+        if (order.PaymentStatus == null) return BadRequest("Ei order e kono online payment nai.");
+        if (order.Status is WebOrderStatus.Delivered or WebOrderStatus.Cancelled) return BadRequest($"{order.Status} order er payment bodlano jay na.");
+        if (order.PaymentStatus == PaymentStatus.Verified) return BadRequest("Payment age-i verify kora hoyeche.");
+
+        await using var tx = await _db.Database.BeginTransactionAsync();
+        if (request.Verified)
+        {
+            var amount = Math.Round(request.Amount ?? order.PaymentAmount, 2);
+            var room = order.Total - order.Advance;
+            if (amount <= 0 || amount > room) return BadRequest($"Taka 0 theke ৳{room:N0} er moddhe hote hobe.");
+
+            order.PaymentAmount = amount;
+            order.PaymentStatus = PaymentStatus.Verified;
+            order.Advance += amount;
+
+            // Confirm hoye gele invoice e joma
+            var sale = order.SaleId == null ? null : await _db.Sales.FindAsync(order.SaleId);
+            if (sale != null)
+            {
+                var pay = Math.Min(amount, sale.DueAmount);
+                if (pay > 0)
+                {
+                    _db.SalePayments.Add(new SalePayment
+                    {
+                        SaleId = sale.Id, InvoiceNo = sale.InvoiceNo, PaymentDate = DateTime.Today, Amount = pay,
+                        Note = $"{order.PaymentMethod} · TrxID {order.PaymentTrxId}", ReceivedBy = User.DisplayName()
+                    });
+                    sale.PaidAmount += pay;
+                    sale.DueAmount -= pay;
+                }
+            }
+        }
+        else
+        {
+            order.PaymentStatus = PaymentStatus.Rejected;
+        }
+
+        order.HandledBy = User.DisplayName();
+        order.UpdatedAt = DateTime.Now;
+        await _db.SaveChangesAsync();
+        await tx.CommitAsync();
+        return order;
+    }
+
     // POST: api/weborders/5/deliver
     // Mal pouche geche, delivery man taka (COD) niye asheche
     [HttpPost("{id:int}/deliver")]

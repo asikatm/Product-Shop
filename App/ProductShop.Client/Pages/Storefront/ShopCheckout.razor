@@ -5,6 +5,7 @@
 @inject StoreService Store
 @inject CartService Cart
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>অর্ডার কনফার্ম</PageTitle>
 
@@ -84,10 +85,71 @@
                         <div class="st-sum-row"><span>ডেলিভারি চার্জ</span><span>@(delivery == 0 ? "ফ্রি" : $"৳ {delivery:N0}")</span></div>
                         <div class="st-sum-row st-sum-total"><span>Total</span><span>৳ @Total.ToString("N0")</span></div>
 
-                        <div class="st-cod">
-                            <div class="st-cod-title"><i class="bi bi-cash-coin me-2"></i>অগ্রিম পেমেন্ট ছাড়া অর্ডার করুন</div>
-                            <div class="st-cod-body">ক্যাশ অন ডেলিভারি — পণ্য হাতে পেয়ে টাকা দিন। @(delivery == 0 ? "ডেলিভারি চার্জ ফ্রি।" : "")</div>
+                        @* ---------- Payment ---------- *@
+                        <h2 class="st-h2 mt-4">পেমেন্ট</h2>
+                        <div class="st-pay-options">
+                            <button type="button" class="st-pay @(IsCod ? "on" : "")" @onclick="() => SetMethod(PaymentMethods.Cod)">
+                                <span class="st-pay-logo cod"><i class="bi bi-cash-coin"></i></span>
+                                <span><strong>ক্যাশ অন ডেলিভারি</strong><small>পণ্য হাতে পেয়ে টাকা দিন</small></span>
+                            </button>
+                            @foreach (var p in payments)
+                            {
+                                <button type="button" class="st-pay @(request.PaymentMethod == p.Method ? "on" : "")" @onclick="() => SetMethod(p.Method)">
+                                    <span class="st-pay-logo @p.Method.ToLowerInvariant()">@p.Method</span>
+                                    <span><strong>@p.Method</strong><small>অগ্রিম / পুরো টাকা পাঠান</small></span>
+                                </button>
+                            }
                         </div>
+
+                        @if (Option is PaymentOption opt)
+                        {
+                            <div class="st-pay-box @opt.Method.ToLowerInvariant()">
+                                <ol>
+                                    <li>@opt.Method অ্যাপ বা ডায়াল (@(opt.Method == PaymentMethods.Bkash ? "*247#" : "*167#")) থেকে <strong>@(opt.Type == "Merchant" ? "Payment" : "Send Money")</strong> করুন</li>
+                                    <li>
+                                        নাম্বার: <strong class="st-pay-no">@opt.Number</strong>
+                                        <button type="button" class="st-copy" @onclick="() => CopyAsync(opt.Number)"><i class="bi @(copied ? "bi-check2" : "bi-copy")"></i> @(copied ? "কপি হয়েছে" : "কপি")</button>
+                                        <small class="d-block">(@(opt.Type == "Merchant" ? "Merchant" : "Personal") নাম্বার)</small>
+                                    </li>
+                                    <li>যত টাকা পাঠাবেন লিখুন — পুরো ৳ @Total.ToString("N0") অথবা অগ্রিম (বাকি টাকা ক্যাশ অন ডেলিভারি)</li>
+                                    <li>SMS-এ পাওয়া <strong>Transaction ID (TrxID)</strong> নিচে লিখুন</li>
+                                </ol>
+
+                                <div class="row g-2">
+                                    <div class="col-sm-6">
+                                        <label class="st-field-label">যত টাকা পাঠিয়েছেন <span>*</span></label>
+                                        <input type="number" min="1" max="@Total" class="st-input" value="@(request.PaymentAmount == 0 ? "" : request.PaymentAmount.ToString("0"))" @onchange="SetAmount" />
+                                        <div class="st-pay-quick">
+                                            <button type="button" @onclick="() => request.PaymentAmount = Total">পুরো ৳@Total.ToString("N0")</button>
+                                            @foreach (var a in AdvanceOptions)
+                                            {
+                                                <button type="button" @onclick="() => request.PaymentAmount = a">৳@a</button>
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <label class="st-field-label">যে নাম্বার থেকে পাঠিয়েছেন <span>*</span></label>
+                                        <input type="tel" inputmode="numeric" class="st-input" placeholder="01XXXXXXXXX" @bind="request.PaymentFrom" />
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="st-field-label">Transaction ID (TrxID) <span>*</span></label>
+                                        <input class="st-input st-trx" placeholder="যেমন: 9JK7ABCD12" maxlength="20" autocomplete="off" @bind="request.PaymentTrxId" />
+                                    </div>
+                                </div>
+                                @if (request.PaymentAmount > 0 && request.PaymentAmount < Total)
+                                {
+                                    <div class="st-pay-due">ডেলিভারির সময় দিবেন: <strong>৳ @((Total - request.PaymentAmount).ToString("N0"))</strong></div>
+                                }
+                                <div class="st-pay-note"><i class="bi bi-shield-check me-1"></i>আমরা @opt.Method-এ মিলিয়ে দেখে অর্ডার কনফার্ম করব।</div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="st-cod">
+                                <div class="st-cod-title"><i class="bi bi-cash-coin me-2"></i>অগ্রিম পেমেন্ট ছাড়া অর্ডার করুন</div>
+                                <div class="st-cod-body">ক্যাশ অন ডেলিভারি — পণ্য হাতে পেয়ে টাকা দিন। @(delivery == 0 ? "ডেলিভারি চার্জ ফ্রি।" : "")</div>
+                            </div>
+                        }
 
                         @if (error != null)
                         {
@@ -113,12 +175,18 @@
 
 @code {
     private PlaceOrderRequest request = new();
+    private List<PaymentOption> payments = new();
     private decimal delivery;
     private string? error;
     private string? phoneError;
     private bool busy;
+    private bool copied;
+
+    private static readonly decimal[] AdvanceOptions = { 100, 200, 500 };
 
     private decimal Total => Cart.Total + delivery;
+    private bool IsCod => Option == null;
+    private PaymentOption? Option => payments.FirstOrDefault(p => p.Method == request.PaymentMethod);
 
     protected override async Task OnInitializedAsync()
     {
@@ -126,11 +194,37 @@
         await Cart.LoadAsync();
         try
         {
-            delivery = (await Store.GetInfoAsync()).DeliveryCharge;
+            var info = await Store.GetInfoAsync();
+            delivery = info.DeliveryCharge;
+            payments = info.Payments;
         }
         catch (Exception)
         {
             delivery = 0;
+        }
+    }
+
+    private void SetMethod(string method)
+    {
+        request.PaymentMethod = method;
+        error = null;
+        if (method != PaymentMethods.Cod && request.PaymentAmount == 0) request.PaymentAmount = Total;
+        if (method != PaymentMethods.Cod && string.IsNullOrWhiteSpace(request.PaymentFrom)) request.PaymentFrom = request.Phone;
+    }
+
+    private void SetAmount(ChangeEventArgs e) =>
+        request.PaymentAmount = decimal.TryParse(e.Value?.ToString(), out var v) ? Math.Max(0, v) : 0;
+
+    private async Task CopyAsync(string text)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            copied = true;
+        }
+        catch (Exception)
+        {
+            // Clipboard na challe number to dekhai ache
         }
     }
 
@@ -143,6 +237,33 @@
         {
             phoneError = "সঠিক মোবাইল নাম্বার দিন (01 দিয়ে শুরু, ১১ ডিজিট)।";
             return;
+        }
+
+        if (Option is PaymentOption opt)
+        {
+            if (request.PaymentAmount < 1 || request.PaymentAmount > Total)
+            {
+                error = $"যত টাকা পাঠিয়েছেন লিখুন (৳১ থেকে ৳{Total:N0})।";
+                return;
+            }
+            if (PhoneHelper.Normalize(request.PaymentFrom) == null)
+            {
+                error = $"যে {opt.Method} নাম্বার থেকে পাঠিয়েছেন সেটা সঠিক ভাবে লিখুন।";
+                return;
+            }
+            request.PaymentTrxId = request.PaymentTrxId?.Trim().ToUpperInvariant();
+            if (string.IsNullOrEmpty(request.PaymentTrxId) || request.PaymentTrxId.Length < 6)
+            {
+                error = "SMS-এ পাওয়া Transaction ID (TrxID) লিখুন।";
+                return;
+            }
+        }
+        else
+        {
+            request.PaymentMethod = PaymentMethods.Cod;
+            request.PaymentAmount = 0;
+            request.PaymentFrom = null;
+            request.PaymentTrxId = null;
         }
 
         request.Phone = phone;

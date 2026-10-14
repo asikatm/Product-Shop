@@ -77,7 +77,15 @@ else
                             <td class="small text-muted text-truncate" style="max-width:240px">@o.Address</td>
                             <td class="text-end">@o.Items.Sum(i => i.Quantity) pcs</td>
                             <td class="text-end fw-semibold">@Fmt.Money(o.Total)</td>
-                            <td><WebOrderBadge Status="@o.Status" /></td>
+                            <td>
+                                <WebOrderBadge Status="@o.Status" />
+                                @if (o.PaymentStatus != null)
+                                {
+                                    <span class="wo-pay-badge @o.PaymentMethod.ToLowerInvariant() ms-1" title="@o.PaymentMethod @Fmt.Money(o.PaymentAmount) · @o.PaymentStatus">
+                                        @o.PaymentMethod @(o.PaymentStatus == PaymentStatus.Verified ? "✓" : o.PaymentStatus == PaymentStatus.Rejected ? "✕" : "?")
+                                    </span>
+                                }
+                            </td>
                             <td class="text-end"><a class="btn btn-sm btn-outline-secondary" href="web-orders/@o.Id" @onclick:stopPropagation>Details</a></td>
                         </tr>
                     }
