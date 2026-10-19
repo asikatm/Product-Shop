@@ -82,6 +82,20 @@ public class AuthService
         await response.EnsureOkAsync();
     }
 
+    // Password bhule gele: mobile e OTP SMS pathay
+    public async Task<ForgotPasswordResponse> ForgotPasswordAsync(ForgotPasswordRequest request)
+    {
+        var response = await _http.PostAsJsonAsync("api/auth/forgot-password", request);
+        await response.EnsureOkAsync();
+        return (await response.Content.ReadFromJsonAsync<ForgotPasswordResponse>())!;
+    }
+
+    public async Task ResetPasswordAsync(ResetPasswordRequest request)
+    {
+        var response = await _http.PostAsJsonAsync("api/auth/reset-password", request);
+        await response.EnsureOkAsync();
+    }
+
     public async Task LogoutAsync()
     {
         _state.Clear();

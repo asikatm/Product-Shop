@@ -122,6 +122,47 @@ public class ChangePasswordRequest
     public string NewPassword { get; set; } = string.Empty;
 }
 
+// Password bhule gele: username + account er mobile number e OTP SMS jay
+public class ForgotPasswordRequest
+{
+    [Required(ErrorMessage = "Username dite hobe")]
+    public string Username { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Mobile number dite hobe")]
+    [StringLength(20)]
+    public string Phone { get; set; } = string.Empty;
+}
+
+public class ForgotPasswordResponse
+{
+    public string Message { get; set; } = string.Empty;
+
+    // Shudhu test (Sms:Provider = "Log" + Development) e OTP ta ekhanei ashe
+    public string? DevOtp { get; set; }
+}
+
+// SMS e pawa OTP diye notun password set kora
+public class ResetPasswordRequest
+{
+    [Required(ErrorMessage = "Username dite hobe")]
+    public string Username { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Mobile number dite hobe")]
+    [StringLength(20)]
+    public string Phone { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "OTP dite hobe")]
+    [RegularExpression("^[0-9]{6}$", ErrorMessage = "OTP 6 digit er number")]
+    public string Otp { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Notun password dite hobe")]
+    [StringLength(100, MinimumLength = 6, ErrorMessage = "Password kompokkhe 6 okkhor")]
+    public string NewPassword { get; set; } = string.Empty;
+
+    [Compare(nameof(NewPassword), ErrorMessage = "Duita password mile nai")]
+    public string ConfirmPassword { get; set; } = string.Empty;
+}
+
 // Khali ("") hole valid; kichu likhle thik email hote hobe
 public class OptionalEmailAttribute : ValidationAttribute
 {

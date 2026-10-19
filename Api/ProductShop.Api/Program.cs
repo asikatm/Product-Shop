@@ -20,6 +20,8 @@ builder.Services.AddSingleton<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<PermissionService>();
 builder.Services.AddScoped<SaleWriter>();
+builder.Services.AddSingleton<OtpStore>();
+builder.Services.AddHttpClient<SmsSender>(client => client.Timeout = TimeSpan.FromSeconds(20));
 
 // Website theke order: ek IP theke minute e 5 tar beshi na (spam atkate).
 // Cloudflare tunnel er pechone ashol IP "CF-Connecting-IP" header e thake.
@@ -29,6 +31,11 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("store-orders", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Request.Headers["CF-Connecting-IP"].FirstOrDefault() ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(1) }));
+
+    // Password reset (OTP chawa + OTP deya): ek IP theke 10 minute e 10 bar (SMS khoroch ar OTP guess atkate)
+    options.AddPolicy("password-reset", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Request.Headers["CF-Connecting-IP"].FirstOrDefault() ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(10) }));
 });
 
 // Login token (JWT) diye API protect kora

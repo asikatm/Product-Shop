@@ -13,6 +13,8 @@ public static class ApiHelper
             throw new Exception("Login er meyad shesh, abar login korun.");
         if (response.StatusCode == HttpStatusCode.Forbidden)
             throw new Exception("Apnar ei kaajer permission nai.");
+        if (response.StatusCode == HttpStatusCode.TooManyRequests)
+            throw new Exception("Onek bar chesta kora hoyeche. Kichukkhon por abar chesta korun.");
 
         var message = await response.Content.ReadAsStringAsync();
         if (string.IsNullOrWhiteSpace(message))

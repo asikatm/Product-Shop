@@ -104,6 +104,32 @@ Workflow ta ache `.github/workflows/deploy-azure.yml` e.
   Shop e shara din use korle **B1** nin.
 - **Free SQL**: use na hole auto-pause hoy; prothom request e kichu second deri hote pare.
 
+## Password bhule gele (OTP SMS)
+
+Login page e **Password bhule gechen?** → username + account er mobile number → SMS e 6 digit OTP → notun password.
+User er account e mobile number na thakle OTP jabe na (Users page theke number din).
+
+SMS kivabe jabe, ta `Sms:Provider` setting e:
+
+| Provider | Ki hoy |
+|---|---|
+| `Log` (default) | SMS jay na. OTP API er log e lekha hoy; Development e page e o dekhay. Test er jonno. |
+| `SmsGate` | Nijer Android phone theke ashol SMS, SIM er SMS rate e. API free. |
+| `BulkSmsBd` | bulksmsbd.net (account khulle kichu free test SMS). Settings: `Sms__BulkSmsBd__ApiKey`, `Sms__BulkSmsBd__SenderId`. Dashboard e IP whitelist bondho rakhun ba server er IP din. |
+
+`SmsGate` chalu korte:
+1. Android phone e **SMS Gateway for Android** app install korun (<https://sms-gate.app>).
+2. App e **Cloud server** chalu korun → app je **Username / Password** dekhay ta likhe rakhun.
+3. Azure Web App → **Environment variables → App settings** (PC te hole `appsettings.json` er `Sms` part):
+
+| Name | Value |
+|---|---|
+| `Sms__Provider` | `SmsGate` |
+| `Sms__SmsGate__Username` | app er username |
+| `Sms__SmsGate__Password` | app er password |
+
+Phone e internet ar app chalu thakte hobe. Beshi SMS lagle pore local SMS company (BulkSMSBD, Alpha Net) neya jabe.
+
 ## Problem hole
 
 | Dekhchen | Ki korben |

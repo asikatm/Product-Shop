@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using ProductShop.Api.Data;
 using ProductShop.Api.Services;
@@ -16,13 +17,20 @@ public class AuthController : ControllerBase
     private readonly TokenService _tokens;
     private readonly IPasswordHasher<AppUser> _hasher;
     private readonly PermissionService _permissions;
+    private readonly OtpStore _otps;
+    private readonly SmsSender _sms;
+    private readonly IWebHostEnvironment _env;
 
-    public AuthController(AppDbContext db, TokenService tokens, IPasswordHasher<AppUser> hasher, PermissionService permissions)
+    public AuthController(AppDbContext db, TokenService tokens, IPasswordHasher<AppUser> hasher, PermissionService permissions,
+        OtpStore otps, SmsSender sms, IWebHostEnvironment env)
     {
         _db = db;
         _tokens = tokens;
         _hasher = hasher;
         _permissions = permissions;
+        _otps = otps;
+        _sms = sms;
+        _env = env;
     }
 
     // POST: api/auth/login
@@ -95,6 +103,57 @@ public class AuthController : ControllerBase
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
         return NoContent();
+    }
+
+    // POST: api/auth/forgot-password
+    // Username ar account er mobile number mille oi number e OTP SMS jay.
+    // Mile na gele o ekoi uttor dey, jate keu onner username / number khuje ber korte na pare.
+    [AllowAnonymous]
+    [EnableRateLimiting("password-reset")]
+    [HttpPost("forgot-password")]
+    public async Task<ActionResult<ForgotPasswordResponse>> ForgotPassword(ForgotPasswordRequest request)
+    {
+        var phone = PhoneHelper.Normalize(request.Phone);
+        if (phone == null)
+            return BadRequest("Mobile number thik nai. 01XXXXXXXXX (11 digit) hote hobe.");
+
+        var response = new ForgotPasswordResponse
+        {
+            Message = $"Username ar mobile number thik thakle {PhoneHelper.Pretty(phone)} number e 6 digit er OTP SMS jabe. " +
+                      $"OTP {OtpStore.Lifetime.TotalMinutes:0} minute cholbe."
+        };
+
+        var user = await FindResetUserAsync(request.Username, phone);
+        var otp = user == null ? null : _otps.Create(user.Id);
+        if (otp == null) return response;
+
+        if (!await _sms.SendAsync(phone, $"Apnar password reset OTP: {otp}. {OtpStore.Lifetime.TotalMinutes:0} minute cholbe. Karo sathe share korben na."))
+            return StatusCode(StatusCodes.Status502BadGateway, "SMS pathano jay nai. Kichukkhon por abar chesta korun ba admin er sathe jogajog korun.");
+
+        if (_sms.IsLogOnly && _env.IsDevelopment()) response.DevOtp = otp;
+        return response;
+    }
+
+    // POST: api/auth/reset-password
+    [AllowAnonymous]
+    [EnableRateLimiting("password-reset")]
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword(ResetPasswordRequest request)
+    {
+        var phone = PhoneHelper.Normalize(request.Phone);
+        var user = phone == null ? null : await FindResetUserAsync(request.Username, phone);
+        if (user == null || !_otps.Verify(user.Id, request.Otp.Trim()))
+            return BadRequest("OTP vul ba meyad shesh. Notun OTP niye abar chesta korun.");
+
+        user.PasswordHash = _hasher.HashPassword(user, request.NewPassword);
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    private Task<AppUser?> FindResetUserAsync(string username, string phone)
+    {
+        var name = username.Trim();
+        return _db.Users.FirstOrDefaultAsync(u => u.Username == name && u.Phone == phone);
     }
 
     // POST: api/auth/change-password
